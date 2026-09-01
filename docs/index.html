@@ -376,7 +376,7 @@
 <div id="helpModal" class="modal hidden"><div class="modal-card">
   <h2>How to use</h2>
   <p><strong>1. Pick a class.</strong> The bottom bar's first dropdown switches weapon class; the second jumps straight to one line ("tree") instead of drawing the whole class at once — useful since some classes run to dozens of lines.</p>
-  <p><strong>2. Pick a view.</strong> 2.5D is a tilted map you pan and zoom across. 2D flattens that same layout with no tilt. 3D is a free orbit around one tree at a time in real 3D space (drag to orbit, wheel to zoom, click a node to re-center the orbit on it). <strong>Orbit</strong> locks the rotation so dragging pans the view sideways instead — the same trick as <strong>Angle</strong> in 2.5D, and middle-click toggles whichever of the two the view you are in has.</p>
+  <p><strong>2. Pick a view.</strong> 2.5D is a tilted map you pan and zoom across. 2D flattens that same layout with no tilt. 3D is a free orbit around one tree at a time in real 3D space (drag to orbit, wheel to zoom, click a node to re-center the orbit on it). The camera button names what a drag does right now: <strong>Orbit</strong> while dragging rotates, <strong>Pan</strong> once it slides the view sideways instead. Click it, or middle-click the stage, to swap. It is the same control as <strong>Angle</strong> in 2.5D, and middle-click toggles whichever of the two the view you are in has.</p>
   <p><strong>3. Click any node</strong> for its full stats — attack, affinity, slots, element, and whatever the class carries beyond that: charge levels and coatings for Bow, ammo and internal (siege too, for Heavy Bowgun), phials for Switch Axe and Charge Blade, notes for Hunting Horn, shelling for Gunlance, sharpness for every Blademaster weapon, kinsect name and type for Insect Glaive.</p>
   <p><strong>Center On Node</strong> brings the weapon you have selected back to the middle; <strong>Center On Tree</strong> goes back out to the middle of the tree as a whole, which is where the view sat before you clicked anything. Neither changes how far in you are zoomed, and neither drops your selection. In 2.5D, <strong>Angle</strong> locks or unlocks tilting the camera, and <strong>Default angle</strong> snaps back to the starting tilt.</p>
   <p class="muted">A weapon line that branches mid-upgrade stays open past the level it unlocks, matching the actual game mechanic — see About for how that's derived.</p>
@@ -448,6 +448,10 @@
         <a href="https://armoredraven17.github.io/mhgu-fishing/" target="_blank" rel="noopener">Fishing</a>
         <span class="app-desc">A fishing sim on the game's own tables — prepare at camp, travel to a locale, come home with the catch.</span>
       </li>
+      <li>
+        <a href="https://armoredraven17.github.io/mhgu-armor-viewer/" target="_blank" rel="noopener">Armor Viewer</a>
+        <span class="app-desc">Renders a hunter in 3D with every armor piece swappable, so you can mix and match a set.</span>
+      </li>
     </ul>
     <div class="row end gap">
       <button id="linksClose" class="btn">Close</button>
@@ -502,7 +506,7 @@
   <div class="sep" id="angleSep"></div>
   <button id="angleLock" class="mode25d" title="Lock/unlock dragging the viewing angle"><img id="angleLockIcon" alt="">Angle</button>
   <button id="angleReset" class="mode25d">Default angle</button>
-  <button id="orbitLock" class="mode3d hidden" title="Lock the orbit so dragging pans the view instead of rotating it"><img id="orbitLockIcon" alt="">Orbit</button>
+  <button id="orbitLock" class="mode3d hidden" title="Lock the orbit so dragging pans the view instead of rotating it"><img id="orbitLockIcon" alt=""><span id="orbitLockText">Orbit</span></button>
   <div class="sep" id="trailingSep"></div>
   <!-- Runs are parked until the challenge rules are settled. Restore with:
        <button id="reset">New run</button>  -->
@@ -2661,7 +2665,9 @@ function paintHint() {
               : (angleLocked ? "pan" : "tilt");
   document.getElementById("hint").innerHTML =
     [`drag to ${drags}`, "wheel to zoom", "click any node to inspect it"]
-      .map(t => `<span>${t}</span>`).join("");
+      .map(t => `<span>${t}</span>`).join("\n");   // newline, not "": a flex container drops whitespace-only
+  // text nodes so the layout is untouched, but without it textContent runs the
+  // three lines together -- what a screen reader says and what a copy yields.
   // Its width changes with the verb, and whether it clears the bar depends on
   // that width, so the two have to be worked out together.
   placeKey();
@@ -2674,13 +2680,48 @@ paintAngleLock();
 // gold "unlocked" state, so it reads as the same idea rather than a new one.
 const orbitLockBtn = document.getElementById("orbitLock");
 const orbitLockIcon = document.getElementById("orbitLockIcon");
+// The button names the mode that is ACTIVE -- "Orbit" while a drag rotates,
+// "Pan" once it doesn't -- rather than naming the thing being locked. Reading
+// the control then tells you what dragging will do right now, which is the
+// question you actually have, and it agrees with the hint underneath instead
+// of inverting it. Same control, same wording, as the Armor Viewer's camera bar.
+const orbitLockText = document.getElementById("orbitLockText");
+/* Two labels of different widths would shunt everything to the right of the
+   button along every time it was pressed. Measure both once and pin the button
+   to the wider.
+
+   It has to be un-hidden to be measured: it carries .mode3d.hidden at load
+   because the app boots in 2.5D, and a display:none button reports an
+   offsetWidth of zero -- which would pin it to nothing at all. */
+function pinOrbitWidth() {
+  const wasHidden = orbitLockBtn.classList.contains("hidden");
+  if (wasHidden) orbitLockBtn.classList.remove("hidden");
+  orbitLockBtn.style.minWidth = "";
+  const keep = orbitLockText.textContent;
+  let w = 0;
+  for (const t of ["Orbit", "Pan"]) {
+    orbitLockText.textContent = t;
+    w = Math.max(w, orbitLockBtn.offsetWidth);
+  }
+  orbitLockText.textContent = keep;
+  orbitLockBtn.style.minWidth = w + "px";
+  orbitLockBtn.style.justifyContent = "center";
+  if (wasHidden) orbitLockBtn.classList.add("hidden");
+}
 function paintOrbitLock() {
-  orbitLockIcon.src = BOOK_ICON[orbitLocked ? "locked" : "unlocked"];
+  orbitLockIcon.src = BOOK_ICON[orbitLocked ? "unlocked" : "locked"];
+  orbitLockText.textContent = orbitLocked ? "Pan" : "Orbit";
   orbitLockBtn.classList.toggle("on", !orbitLocked);
 }
 function toggleOrbitLock() { orbitLocked = !orbitLocked; paintOrbitLock(); paintHint(); placeKey(); }
 orbitLockBtn.onclick = toggleOrbitLock;
 paintOrbitLock();
+pinOrbitWidth();
+/* Measured again once the webfont has actually arrived. The labels are drawn in
+   MHFU, and measuring against the fallback pins the button to the wrong width --
+   the kind of thing that looks right locally, where the font is already cached,
+   and is wrong on a first visit. */
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(pinOrbitWidth);
 paintHint();
 document.getElementById("angleReset").onclick = () => setPitch(TILT);
 
