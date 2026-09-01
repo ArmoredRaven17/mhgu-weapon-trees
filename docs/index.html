@@ -376,9 +376,9 @@
 <div id="helpModal" class="modal hidden"><div class="modal-card">
   <h2>How to use</h2>
   <p><strong>1. Pick a class.</strong> The bottom bar's first dropdown switches weapon class; the second jumps straight to one line ("tree") instead of drawing the whole class at once — useful since some classes run to dozens of lines.</p>
-  <p><strong>2. Pick a view.</strong> 2.5D is a tilted map you pan and zoom across. 2D flattens that same layout with no tilt. 3D is a free orbit around one tree at a time in real 3D space (drag to orbit, wheel to zoom, click a node to re-center the orbit on it). The camera button names what a drag does right now: <strong>Orbit</strong> while dragging rotates, <strong>Pan</strong> once it slides the view sideways instead. Click it, or middle-click the stage, to swap. It is the same control as <strong>Angle</strong> in 2.5D, and middle-click toggles whichever of the two the view you are in has.</p>
+  <p><strong>2. Pick a view.</strong> 2.5D is a tilted map you pan and zoom across. 2D flattens that same layout with no tilt. 3D is a free orbit around one tree at a time in real 3D space (drag to orbit, wheel to zoom, click a node to re-center the orbit on it). The camera button names what a drag does right now: <strong>Orbit</strong> while dragging rotates, <strong>Pan</strong> once it slides the view sideways instead. Click it, or middle-click the stage, to swap. The 2.5D bar carries the same control, reading <strong>Pan</strong> or <strong>Tilt</strong>, and middle-click toggles whichever of the two the view you are in has.</p>
   <p><strong>3. Click any node</strong> for its full stats — attack, affinity, slots, element, and whatever the class carries beyond that: charge levels and coatings for Bow, ammo and internal (siege too, for Heavy Bowgun), phials for Switch Axe and Charge Blade, notes for Hunting Horn, shelling for Gunlance, sharpness for every Blademaster weapon, kinsect name and type for Insect Glaive.</p>
-  <p><strong>Center On Node</strong> brings the weapon you have selected back to the middle; <strong>Center On Tree</strong> goes back out to the middle of the tree as a whole, which is where the view sat before you clicked anything. Neither changes how far in you are zoomed, and neither drops your selection. In 2.5D, <strong>Angle</strong> locks or unlocks tilting the camera, and <strong>Default angle</strong> snaps back to the starting tilt.</p>
+  <p><strong>Center On Node</strong> brings the weapon you have selected back to the middle; <strong>Center On Tree</strong> goes back out to the middle of the tree as a whole, which is where the view sat before you clicked anything. Neither changes how far in you are zoomed, and neither drops your selection. In 2.5D, the camera button reads <strong>Pan</strong> or <strong>Tilt</strong> for what a drag does right now, and <strong>Default angle</strong> snaps back to the starting tilt.</p>
   <p class="muted">A weapon line that branches mid-upgrade stays open past the level it unlocks, matching the actual game mechanic — see About for how that's derived.</p>
   <button id="helpClose">Close</button>
 </div></div>
@@ -504,7 +504,7 @@
   <button id="home" title="Bring the weapon you have selected back to the middle">Center On Node</button>
   <button id="homeTree" title="Pull back out to the middle of the whole tree">Center On Tree</button>
   <div class="sep" id="angleSep"></div>
-  <button id="angleLock" class="mode25d" title="Lock/unlock dragging the viewing angle"><img id="angleLockIcon" alt="">Angle</button>
+  <button id="angleLock" class="mode25d" title="Switch what dragging does: pan the view, or tilt the camera"><img id="angleLockIcon" alt=""><span id="angleLockText">Pan</span></button>
   <button id="angleReset" class="mode25d">Default angle</button>
   <button id="orbitLock" class="mode3d hidden" title="Lock the orbit so dragging pans the view instead of rotating it"><img id="orbitLockIcon" alt=""><span id="orbitLockText">Orbit</span></button>
   <div class="sep" id="trailingSep"></div>
@@ -2644,10 +2644,35 @@ if (resetBtn) resetBtn.onclick = () => document.getElementById("start").classLis
 // Book icons from mhgu-editor: yellow (locked) / grey (unlocked) — same
 // asset family as the other embedded icons, not an emoji.
 const BOOK_ICON = { locked: "data:image/webp;base64,UklGRs4AAABXRUJQVlA4TMIAAAAvMUAMEAZIjSRJkgbWkCtCQ2cYHZtRmV779yIQhHDN0C65hCAQNDfGOimscP8VuW2kpDOHZYY3COmRDIrltX30bL1tHcBdSHBAYOEA2bUf2HAdxT/qBspp09K0jwm1ESgteCe6ttJbFQUrfCiLGjrQCpRDCoNsoYWFidwOxKUJi7VJWv7kuhcgIAJEFqIiYucQu5M4AcQpI04ycVsQNxJx6xE3K39733uPYzEimoUzL/YB+P7bYvh/0TpTEcP8rwuCkQ==", unlocked: "data:image/webp;base64,UklGRs4AAABXRUJQVlA4TMEAAAAvMUAMEAZGkSRJQRC2MIMUZF5z1fLvJsi2mc7cjjKVOxJk20xnbFeZyh37r8htIyWdOSwzvEGQNhgUy1mSdtVZbS2Ajs0ECwTscXxrOOCXRvFHMwE79E8n+jjDdWyFlngnOrbQWxUlFvhIlpclHWgFwiElg2xhB5ZMZDmQLk2yWGXszOKe1AIERIDIQlRE7BxidxIngDhlxEkmbgviRiJuPeJm5W9vScvhEdHYMy/2Auj622L4X7Q0UxHD/K8LgpEAAA==" };
+/* Two labels of different widths would shunt everything to the right of a
+   button along every time it was pressed. Measure every label it can show and
+   pin it to the widest.
+
+   It may well be hidden when measured -- both toggles are view-specific and
+   only one view is ever showing -- and a display:none button reports an
+   offsetWidth of zero, which would pin it to nothing at all. */
+function pinToggleWidth(btn, textEl, labels) {
+  const wasHidden = btn.classList.contains("hidden");
+  if (wasHidden) btn.classList.remove("hidden");
+  btn.style.minWidth = "";
+  const keep = textEl.textContent;
+  let w = 0;
+  for (const t of labels) { textEl.textContent = t; w = Math.max(w, btn.offsetWidth); }
+  textEl.textContent = keep;
+  btn.style.minWidth = w + "px";
+  btn.style.justifyContent = "center";
+  if (wasHidden) btn.classList.add("hidden");
+}
 const angleLockBtn = document.getElementById("angleLock");
 const angleLockIcon = document.getElementById("angleLockIcon");
+// Names the mode that is ACTIVE, exactly as the 3D button does: "Pan" while a
+// drag slides the view, "Tilt" once it swings the camera instead. The two read
+// as one control in two views -- the pan state is the grey book unlit in both,
+// and the camera-moving state is the yellow book lit in both.
+const angleLockText = document.getElementById("angleLockText");
 function paintAngleLock() {
-  angleLockIcon.src = BOOK_ICON[angleLocked ? "locked" : "unlocked"];
+  angleLockIcon.src = BOOK_ICON[angleLocked ? "unlocked" : "locked"];
+  angleLockText.textContent = angleLocked ? "Pan" : "Tilt";
   angleLockBtn.classList.toggle("on", !angleLocked);
 }
 function toggleAngleLock() {
@@ -2675,9 +2700,9 @@ function paintHint() {
 angleLockBtn.onclick = toggleAngleLock;
 paintAngleLock();
 
-// 3D's equivalent, deliberately the same control in a different view: lock the
-// thing dragging normally does, and dragging pans instead. Same icons, same
-// gold "unlocked" state, so it reads as the same idea rather than a new one.
+// 3D's half of the same control. The pair are deliberately identical in
+// behaviour and differ only in which alternative the view offers: 2.5D swaps
+// panning for tilting, 3D swaps it for orbiting.
 const orbitLockBtn = document.getElementById("orbitLock");
 const orbitLockIcon = document.getElementById("orbitLockIcon");
 // The button names the mode that is ACTIVE -- "Orbit" while a drag rotates,
@@ -2686,27 +2711,10 @@ const orbitLockIcon = document.getElementById("orbitLockIcon");
 // question you actually have, and it agrees with the hint underneath instead
 // of inverting it. Same control, same wording, as the Armor Viewer's camera bar.
 const orbitLockText = document.getElementById("orbitLockText");
-/* Two labels of different widths would shunt everything to the right of the
-   button along every time it was pressed. Measure both once and pin the button
-   to the wider.
-
-   It has to be un-hidden to be measured: it carries .mode3d.hidden at load
-   because the app boots in 2.5D, and a display:none button reports an
-   offsetWidth of zero -- which would pin it to nothing at all. */
-function pinOrbitWidth() {
-  const wasHidden = orbitLockBtn.classList.contains("hidden");
-  if (wasHidden) orbitLockBtn.classList.remove("hidden");
-  orbitLockBtn.style.minWidth = "";
-  const keep = orbitLockText.textContent;
-  let w = 0;
-  for (const t of ["Orbit", "Pan"]) {
-    orbitLockText.textContent = t;
-    w = Math.max(w, orbitLockBtn.offsetWidth);
-  }
-  orbitLockText.textContent = keep;
-  orbitLockBtn.style.minWidth = w + "px";
-  orbitLockBtn.style.justifyContent = "center";
-  if (wasHidden) orbitLockBtn.classList.add("hidden");
+// Pinned together, and only once both buttons exist.
+function pinToggleWidths() {
+  pinToggleWidth(angleLockBtn, angleLockText, ["Pan", "Tilt"]);
+  pinToggleWidth(orbitLockBtn, orbitLockText, ["Orbit", "Pan"]);
 }
 function paintOrbitLock() {
   orbitLockIcon.src = BOOK_ICON[orbitLocked ? "unlocked" : "locked"];
@@ -2716,12 +2724,12 @@ function paintOrbitLock() {
 function toggleOrbitLock() { orbitLocked = !orbitLocked; paintOrbitLock(); paintHint(); placeKey(); }
 orbitLockBtn.onclick = toggleOrbitLock;
 paintOrbitLock();
-pinOrbitWidth();
+pinToggleWidths();
 /* Measured again once the webfont has actually arrived. The labels are drawn in
    MHFU, and measuring against the fallback pins the button to the wrong width --
    the kind of thing that looks right locally, where the font is already cached,
    and is wrong on a first visit. */
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(pinOrbitWidth);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(pinToggleWidths);
 paintHint();
 document.getElementById("angleReset").onclick = () => setPitch(TILT);
 
