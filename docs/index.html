@@ -186,6 +186,8 @@
   #flat{position:absolute;inset:0;overflow:hidden;display:none}
   #flat.on{display:block}
   #flatSvg{position:absolute;top:0;left:0;transform-origin:0 0}
+  #flat .nd.dim{opacity:.16}
+  #flat .nd.dimlit{opacity:.5}
   #flat .nd .tick{display:none}
   #flat .nd.made .tick{display:block;fill:var(--gold);font-size:38px;font-weight:700;
                        paint-order:stroke;stroke:#000;stroke-width:6px}
@@ -334,15 +336,16 @@
   #angleLock img,#orbitLock img{width:15px;height:15px;display:block}
   #bar .sep{width:1px;height:20px;background:var(--line);margin:0 3px}
   #trailingSep{display:none}   /* nothing left to separate while runs are parked */
-  #tree,#wclass,#viewSel,#shapeSel{font:inherit;font-size:12.5px;color:var(--text);background:var(--film);
+  #tree,#wclass,#viewSel,#shapeSel,#madeSel{font:inherit;font-size:12.5px;color:var(--text);background:var(--film);
         border:1px solid var(--line);border-radius:7px;padding:6px 8px;cursor:pointer}
   #tree{max-width:260px}
   #wclass{max-width:150px}
   #viewSel{max-width:130px}
   #shapeSel{max-width:130px}
+  #madeSel{max-width:150px}
   #theme{max-width:120px}
-  #tree:hover,#wclass:hover,#viewSel:hover,#shapeSel:hover{background:var(--film-hi)}
-  #tree option,#wclass option,#viewSel option,#shapeSel option{background:var(--bg2);color:var(--text)}
+  #tree:hover,#wclass:hover,#viewSel:hover,#shapeSel:hover,#madeSel:hover{background:var(--film-hi)}
+  #tree option,#wclass option,#viewSel option,#shapeSel option,#madeSel option{background:var(--bg2);color:var(--text)}
   #wclass option:disabled,#viewSel option:disabled,#shapeSel option:disabled{color:var(--muted)}
   /* Stacked rather than one dot-separated line. Run across, it was wide
      enough to reach under the bottom bar -- and the bar grew, since it now
@@ -506,6 +509,11 @@
        is what shows and hides this — only runs when the view is CHANGED. The
        .mode25d controls below need no such marking for the opposite reason:
        they belong to the view that happens to be the default. -->
+  <select id="madeSel" title="Fade everything except the weapons you ask for">
+    <option value="">No highlight</option>
+    <option value="made">Highlight made</option>
+    <option value="unmade">Highlight unmade</option>
+  </select>
   <select id="shapeSel" class="mode3d hidden" title="How the tree is laid out in 3D">
     <option value="shrub">Shrub shape</option>
     <option value="bush">Bush shape</option>
@@ -1663,6 +1671,25 @@ const RANK = { away: 0, ghost: 1, far: 2, past: 3, next: 4, cur: 5 };
    The mhgu- prefix matters too: every one of these apps is served from the same
    Pages domain and therefore shares one localStorage, which is exactly why the
    theme key is called mhgu-theme. */
+/* Highlight filter. It FADES what it is not highlighting rather than hiding
+   it: the shape of the tree is the thing you are reading, and dropping nodes
+   out of it would leave holes exactly where the answer is meant to be.
+
+   The awkward part is that a selected tree already owns a highlight, so two of
+   them are competing for the same eye. They are kept on separate channels
+   rather than one overriding the other -- the selection owns COLOUR (the
+   rarity glow, the lit strokes, the white ring), the filter owns OPACITY -- and
+   a weapon on the selected path is never faded the whole way. It drops to half
+   instead of to a ghost, so clicking a line always still shows you that line,
+   whatever the filter is set to, while the made/unmade split stays legible
+   along it. The one weapon you actually picked never fades at all. */
+let madeFilter = "";
+const FILTER_DIM = .16, FILTER_DIM_LIT = .5;
+// Anything we cannot classify counts as a match, so an unknown key is never
+// silently faded out of the picture.
+const filterHit = n => !madeFilter || !n ||
+  (madeFilter === "made" ? isMade(n) : !isMade(n));
+
 const MADE_KEY = "mhgu-trees-made";
 let made = new Set();
 try { made = new Set(JSON.parse(localStorage.getItem(MADE_KEY) || "[]")); } catch (e) {}
@@ -1759,9 +1786,12 @@ function draw() {
     // reading one weapon, tracing where its line goes matters more than which
     // of them happens to be the next upgrade.
     // Lit if it is on the selected line, or on the way back to the root.
-    if (selLine != null && (v.n.t === selLine || (selPath && selPath.has(v.n.key)))) {
-      stroke = litCol(v.n); w = 3.6; op = 1;
-    }
+    const lit = selLine != null &&
+      (v.n.t === selLine || (selPath && selPath.has(v.n.key)));
+    if (lit) { stroke = litCol(v.n); w = 3.6; op = 1; }
+    // Faded last, so it applies to whatever state the edge ended up in -- but
+    // never all the way on the selected path, which has to stay traceable.
+    if (!filterHit(v.n)) op = Math.min(op, lit ? FILTER_DIM_LIT : FILTER_DIM);
     const d = pathD(route(par, v.n));
     if (!d) continue;
     // 2D's width scales directly off its own plain zoom — no FOV/DIST term,
@@ -1834,6 +1864,8 @@ function draw() {
     const online = selLine != null &&
       (v.n.t === selLine || (selPath && selPath.has(v.n.key)));
     if (online) op = 1;
+    if (!filterHit(v.n)) op = Math.min(op, online ? FILTER_DIM_LIT : FILTER_DIM);
+    if (selK === v.n.key) op = 1;         // the weapon you picked never fades
     el.style.opacity = op;
     el.className = "node " + v.cls + (selK === v.n.key ? " sel" : "") +
       (online ? " online" : "") + (isMade(v.n) ? " made" : "");
@@ -1937,9 +1969,12 @@ function draw3d() {
     // reading one weapon, tracing where its line goes matters more than which
     // of them happens to be the next upgrade.
     // Lit if it is on the selected line, or on the way back to the root.
-    if (selLine != null && (v.n.t === selLine || (selPath && selPath.has(v.n.key)))) {
-      stroke = litCol(v.n); w = 3.6; op = 1;
-    }
+    const lit = selLine != null &&
+      (v.n.t === selLine || (selPath && selPath.has(v.n.key)));
+    if (lit) { stroke = litCol(v.n); w = 3.6; op = 1; }
+    // Faded last, so it applies to whatever state the edge ended up in -- but
+    // never all the way on the selected path, which has to stay traceable.
+    if (!filterHit(v.n)) op = Math.min(op, lit ? FILTER_DIM_LIT : FILTER_DIM);
     const wScale = Math.min(1.3, v.p.s * DIST / FOV + .3);
     /* SHRUB routes with one corner: across at the parent's own height, then
        up to the child. That keeps a branch departing visibly at the level
@@ -2033,6 +2068,8 @@ function draw3d() {
     const online = selLine != null &&
       (v.n.t === selLine || (selPath && selPath.has(v.n.key)));
     if (online) op = 1;
+    if (!filterHit(v.n)) op = Math.min(op, online ? FILTER_DIM_LIT : FILTER_DIM);
+    if (selK === v.n.key) op = 1;         // the weapon you picked never fades
     el.style.opacity = op;
     el.className = "node " + v.cls + (selK === v.n.key ? " sel" : "") +
       (online ? " online" : "") + (isMade(v.n) ? " made" : "");
@@ -2197,9 +2234,11 @@ function paint2d() {
     const cls = n ? classOf(n) : null;
     const online = selLine != null && n &&
       (n.t === selLine || (selPath && selPath.has(n.key)));
+    const faded = !filterHit(n) && selK !== g.dataset.k;
     g.setAttribute("class", "nd" + (cls && cls !== "away" ? " " + cls : "") +
       (selK === g.dataset.k ? " sel" : "") + (online ? " online" : "") +
-      (isMade(n) ? " made" : ""));
+      (isMade(n) ? " made" : "") +
+      (faded ? (online ? " dimlit" : " dim") : ""));
     // The icon's own frame, in the line's rarity colour — same reason as the
     // map: the colour is per line, so CSS can't supply it.
     const hit = g.querySelector(".hit");
@@ -2225,8 +2264,10 @@ function paint2d() {
   for (const e of flatSvg.querySelectorAll("path[data-t]")) {
     const on = selLine != null &&
       (+e.dataset.t === selLine || (selPath && selPath.has(e.dataset.k)));
+    const faded = !filterHit(N.get(e.dataset.k));
     e.setAttribute("stroke-width", on ? "4" : "2");
-    e.setAttribute("stroke-opacity", on ? "1" : ".5");
+    e.setAttribute("stroke-opacity",
+      faded ? (on ? String(FILTER_DIM_LIT) : String(FILTER_DIM)) : (on ? "1" : ".5"));
     // Both colours ride on the element, so switching back is exact rather than
     // whatever happened to be set last.
     e.setAttribute("stroke", on ? e.dataset.lit : e.dataset.base);
@@ -2623,6 +2664,15 @@ function applyViewMode() {
 viewSel.onchange = () => { viewMode = viewSel.value; applyViewMode(); };
 // Switching shape rebuilds the 3D coordinates from scratch — the two put
 // weapons in completely different places — then reframes on the result.
+const madeSel = document.getElementById("madeSel");
+madeSel.onchange = () => {
+  madeFilter = madeSel.value;
+  // 2D is static and has to be repainted by hand; the map redraws on its next
+  // frame. Same split as every other state change in this file.
+  if (viewMode === "2d" && flatBuiltFor) paint2d();
+  mark();
+};
+
 const shapeSel = document.getElementById("shapeSel");
 shapeSel.onchange = () => {
   shape3d = shapeSel.value;
