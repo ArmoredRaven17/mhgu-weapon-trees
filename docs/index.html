@@ -108,12 +108,33 @@
     transition:opacity .2s ease;
   }
   .node .dot{
+    position:relative;                 /* the made tick hangs off its corner */
     width:88px;height:88px;border-radius:22px;margin:0 auto;
     border:1px solid transparent; background:rgba(10,12,17,.5);
     display:flex;align-items:center;justify-content:center;
   }
   .node .dot img{width:80px;height:80px;display:block;
                  filter:drop-shadow(0 1px 2px rgba(0,0,0,.9))}
+  /* A made weapon is ticked on the map itself. Without that the tracker would
+     only be readable one node at a time, through the detail pane, which is the
+     opposite of what you want when the question is "what is left to build". */
+  .node .tick{
+    position:absolute; right:-7px; top:-7px; display:none;
+    width:30px; height:30px; border-radius:50%;
+    background:var(--gold); color:#17100a;
+    font-size:18px; line-height:30px; text-align:center; font-weight:700;
+    box-shadow:0 1px 5px rgba(0,0,0,.85);
+  }
+  .node.made .tick{display:block}
+  /* Made tracker in the detail pane. A real <input type=checkbox> rather than a
+     styled div, so it is keyboard reachable and announces itself as a control. */
+  .madebox{display:flex;align-items:center;gap:9px;margin:10px 0 2px;
+           font-size:13px;cursor:pointer;user-select:none;
+           border:1px solid var(--line);border-radius:7px;padding:7px 10px;
+           background:var(--film);color:var(--text)}
+  .madebox:hover{background:var(--film-hi)}
+  .madebox input{width:15px;height:15px;accent-color:var(--gold);cursor:pointer;margin:0}
+  .madebox.on{border-color:var(--gold);color:var(--gold)}
   /* Node labels sit on the map itself, so there's no controlled background
      behind them — a scrim guarantees contrast the way .swatch span does in the
      randomizer, instead of relying on a text-shadow to fight whatever is under
@@ -165,6 +186,9 @@
   #flat{position:absolute;inset:0;overflow:hidden;display:none}
   #flat.on{display:block}
   #flatSvg{position:absolute;top:0;left:0;transform-origin:0 0}
+  #flat .nd .tick{display:none}
+  #flat .nd.made .tick{display:block;fill:var(--gold);font-size:38px;font-weight:700;
+                       paint-order:stroke;stroke:#000;stroke-width:6px}
   #flat .lb{font-size:25px;font-weight:600;paint-order:stroke;stroke:#000;
             stroke-width:3px;stroke-linejoin:round}
   #flat .lv{font-size:19px;fill:var(--muted);paint-order:stroke;stroke:#000;stroke-width:4px;
@@ -1627,6 +1651,36 @@ const litCol = n => cssRgb(litRgb(n));
 const rarName = r => r >= 11 ? "X" : String(r);   // the top tier shows as X, not 11
 
 const RANK = { away: 0, ghost: 1, far: 2, past: 3, next: 4, cur: 5 };
+/* ---------------- made tracker ----------------
+   Which weapons you have actually built. Deliberately separate from the run
+   state: a run is a path you are walking, this is a record of what exists in
+   your box, and the two answer different questions.
+
+   Identity has to carry the class. K() is tree:level and tree indices restart
+   in every weapon class, so Great Sword 48:1 and Bow 48:1 are different
+   weapons with the same key -- storing the bare key would tick both.
+
+   The mhgu- prefix matters too: every one of these apps is served from the same
+   Pages domain and therefore shares one localStorage, which is exactly why the
+   theme key is called mhgu-theme. */
+const MADE_KEY = "mhgu-trees-made";
+let made = new Set();
+try { made = new Set(JSON.parse(localStorage.getItem(MADE_KEY) || "[]")); } catch (e) {}
+const madeId = n => CLASS + "/" + n.key;
+const isMade = n => !!n && made.has(madeId(n));
+function setMade(n, on) {
+  if (on) made.add(madeId(n)); else made.delete(madeId(n));
+  try { localStorage.setItem(MADE_KEY, JSON.stringify([...made])); } catch (e) {}
+  /* The pane is deliberately NOT re-rendered here. renderDetail rebuilds its
+     innerHTML, which would destroy the checkbox mid-interaction and drop
+     keyboard focus on every toggle -- so only the parts that actually changed
+     are touched: the row's own lit state, and the nodes. */
+  const row = document.querySelector("#detail .madebox");
+  if (row) row.classList.toggle("on", on);
+  if (viewMode === "2d" && flatBuiltFor) paint2d();
+  mark();
+}
+
 function classOf(n) {
   if (activeRoot && COMP.get(n.key) !== activeRoot) return null;
   const i = path.indexOf(n.key);
@@ -1747,7 +1801,11 @@ function draw() {
   while (pool.length < vis.length) {
     const el = document.createElement("div");
     el.className = "node";
-    el.innerHTML = '<div class="dot"><img alt=""></div><div class="lbl"></div><div class="sub"></div>';
+    // The tick goes INSIDE .dot, after the img, so el.children keeps its
+    // shape (0 = dot, 1 = label, 2 = sub) and dotEl.firstChild is still the img
+    // -- both are indexed by position elsewhere in this file.
+    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>' +
+      '<div class="lbl"></div><div class="sub"></div>';
     el.addEventListener("click", ev => { ev.stopPropagation(); onNode(el._key); });
     layer.appendChild(el); pool.push(el);
   }
@@ -1778,7 +1836,7 @@ function draw() {
     if (online) op = 1;
     el.style.opacity = op;
     el.className = "node " + v.cls + (selK === v.n.key ? " sel" : "") +
-      (online ? " online" : "");
+      (online ? " online" : "") + (isMade(v.n) ? " made" : "");
     /* The line and the one weapon you picked have to look different, or the
        whole line reads as selected. Being ON the line is said quietly — a
        coloured edge and a faint lift. Being THE selection is said loudly, with
@@ -1944,7 +2002,11 @@ function draw3d() {
   while (pool.length < vis.length) {
     const el = document.createElement("div");
     el.className = "node";
-    el.innerHTML = '<div class="dot"><img alt=""></div><div class="lbl"></div><div class="sub"></div>';
+    // The tick goes INSIDE .dot, after the img, so el.children keeps its
+    // shape (0 = dot, 1 = label, 2 = sub) and dotEl.firstChild is still the img
+    // -- both are indexed by position elsewhere in this file.
+    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>' +
+      '<div class="lbl"></div><div class="sub"></div>';
     el.addEventListener("click", ev => { ev.stopPropagation(); onNode(el._key); });
     layer.appendChild(el); pool.push(el);
   }
@@ -1973,7 +2035,7 @@ function draw3d() {
     if (online) op = 1;
     el.style.opacity = op;
     el.className = "node " + v.cls + (selK === v.n.key ? " sel" : "") +
-      (online ? " online" : "");
+      (online ? " online" : "") + (isMade(v.n) ? " made" : "");
     /* The line and the one weapon you picked have to look different, or the
        whole line reads as selected. Being ON the line is said quietly — a
        coloured edge and a faint lift. Being THE selection is said loudly, with
@@ -2115,7 +2177,8 @@ function build2d() {
     `<rect class="hit" x="-48" y="-48" width="96" height="96" rx="22"/>` +
     `<use href="#fi${rarOf(n)}" x="-44" y="-44"/>` +
     `<text class="lb" x="56" y="-4" fill="${rarCol(n)}">${escAttr(n.name)}</text>` +
-    `<text class="lv" x="56" y="20">LV${n.lv} · ${n.raw}</text></g>`).join("");
+    `<text class="lv" x="56" y="20">LV${n.lv} · ${n.raw}</text>` +
+    `<text class="tick" x="24" y="-20">&#10003;</text></g>`).join("");
 
   flatSvg.setAttribute("width", W2); flatSvg.setAttribute("height", H2);
   flatSvg.setAttribute("viewBox", `0 0 ${W2} ${H2}`);
@@ -2135,7 +2198,8 @@ function paint2d() {
     const online = selLine != null && n &&
       (n.t === selLine || (selPath && selPath.has(n.key)));
     g.setAttribute("class", "nd" + (cls && cls !== "away" ? " " + cls : "") +
-      (selK === g.dataset.k ? " sel" : "") + (online ? " online" : ""));
+      (selK === g.dataset.k ? " sel" : "") + (online ? " online" : "") +
+      (isMade(n) ? " made" : ""));
     // The icon's own frame, in the line's rarity colour — same reason as the
     // map: the colour is per line, so CSS can't supply it.
     const hit = g.querySelector(".hit");
@@ -2892,7 +2956,9 @@ function statusOf(n) {
 function renderDetail() {
   const box = document.getElementById("detail"), n = preview(), c = cur();
   if (!n) {
-    box.innerHTML = `<h1>${DATA[CLASS].label}</h1><div class="lv">${N.size} weapons across ${TREES.length} lines</div>
+    const done = [...N.values()].filter(isMade).length;
+    box.innerHTML = `<h1>${DATA[CLASS].label}</h1><div class="lv">${N.size} weapons across ${
+      TREES.length} lines · ${done} made</div>
       <div class="sect">Browsing</div>
       <div class="mlist">Click any node for its full stats. Use the pickers below to
       change weapon class or line.</div>`;
@@ -2933,6 +2999,8 @@ function renderDetail() {
           rarCol(n)};border-color:${rarCol(n)}66">R${rarName(rarOf(n))}</span>Level ${n.lv}${
           n.key === (c && c.key) ? ` · step ${path.length}` : ""}</div></div></div>
     ${label ? `<div class="chip ${chip}">${label}</div>` : ""}
+    <label class="madebox${isMade(n) ? " on" : ""}"><input type="checkbox" id="madeChk"${
+      isMade(n) ? " checked" : ""}>Made</label>
     <table class="stats">${rows.map(r =>
       `<tr><td>${r[0]}</td><td class="v">${r[1]}</td>${base ? `<td class="d">${r[2] || ""}</td>` : ""}</tr>`).join("")}</table>`;
 
@@ -2990,6 +3058,8 @@ function renderDetail() {
   if (c && options(c).includes(n.key))
     h += `<button id="go">Upgrade to ${n.name}</button>`;
   box.innerHTML = h;
+  const chk = document.getElementById("madeChk");
+  if (chk) chk.onchange = () => setMade(n, chk.checked);
   const go = document.getElementById("go");
   if (go) go.onclick = () => advance(n.key);
 }
