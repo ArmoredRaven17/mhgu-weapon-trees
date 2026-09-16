@@ -432,10 +432,10 @@
 <div id="helpModal" class="modal hidden"><div class="modal-card">
   <h2>How to use</h2>
   <p><strong>1. Pick a class.</strong> The bottom bar's first dropdown switches weapon class; the second jumps straight to one line ("tree") instead of drawing the whole class at once — useful since some classes run to dozens of lines.</p>
-  <p><strong>2. Pick a view.</strong> 2.5D is a tilted map you pan and zoom across. 2D flattens that same layout with no tilt. 3D is a free orbit around one tree at a time in real 3D space (left-drag to pan, right-drag to orbit, wheel to zoom, click a node to re-center the orbit on it). The camera button names what a left-drag does right now, <strong>Pan</strong> or <strong>Orbit</strong>, and the right button always does the other. Click it, or middle-click the stage, to swap the two buttons over. The 2.5D bar carries the same control, reading <strong>Pan</strong> or <strong>Tilt</strong>, and middle-click toggles whichever of the two the view you are in has.</p>
+  <p><strong>2. Pick a view.</strong> 2.5D is a tilted map you pan and zoom across (left-drag to pan, right-drag to tilt). 2D flattens that same layout with no tilt. 3D is a free orbit around one tree at a time in real 3D space (left-drag to pan, right-drag to orbit, wheel to zoom, click a node to re-center the orbit on it). The camera button names what a left-drag does right now, <strong>Pan</strong> or <strong>Orbit</strong>, and the right button always does the other. Click it, or middle-click the stage, to swap the two buttons over. The 2.5D bar carries the same control with <strong>Pan</strong> and <strong>Tilt</strong>, and middle-click swaps whichever pair the view you are in has.</p>
   <p><strong>3. Click any node</strong> for its full stats — attack, affinity, slots, element, and whatever the class carries beyond that: charge levels and coatings for Bow, ammo and internal (siege too, for Heavy Bowgun), phials for Switch Axe and Charge Blade, notes for Hunting Horn, shelling for Gunlance, sharpness for every Blademaster weapon, kinsect name and type for Insect Glaive.</p>
   <p><strong>Snip</strong> &mdash; with a weapon selected, a small circle sits on each edge leading into and out of it. Click one to hide that branch and everything above it. The weapon below a cut gets a dashed ring; double-click it to restore that cut (or select it and press <strong>Restore</strong>), or use <strong>Restore all</strong> in the browsing panel.</p>
-  <p><strong>Center On Node</strong> brings the weapon you have selected back to the middle; <strong>Center On Tree</strong> goes back out to the middle of the tree as a whole, which is where the view sat before you clicked anything. Neither changes how far in you are zoomed, and neither drops your selection. In 2.5D, the camera button reads <strong>Pan</strong> or <strong>Tilt</strong> for what a drag does right now, and <strong>Default tilt</strong> snaps back to the starting tilt.</p>
+  <p><strong>Center On Node</strong> brings the weapon you have selected back to the middle; <strong>Center On Tree</strong> goes back out to the middle of the tree as a whole, which is where the view sat before you clicked anything. Neither changes how far in you are zoomed, and neither drops your selection. In 2.5D, the camera button reads <strong>Pan</strong> or <strong>Tilt</strong> for what a left-drag does right now, and the right button always does the other; <strong>Default tilt</strong> snaps back to the starting tilt.</p>
   <p class="muted">A weapon line that branches mid-upgrade stays open past the level it unlocks, matching the actual game mechanic — see About for how that's derived.</p>
   <button id="helpClose">Close</button>
 </div></div>
@@ -571,7 +571,7 @@
   <button id="home" title="Bring the weapon you have selected back to the middle">Center On Node</button>
   <button id="homeTree" title="Pull back out to the middle of the whole tree">Center On Tree</button>
   <div class="sep" id="angleSep"></div>
-  <button id="angleLock" class="mode25d" title="Switch what dragging does: pan the view, or tilt the camera"><img id="angleLockIcon" alt=""><span id="angleLockText">Pan</span></button>
+  <button id="angleLock" class="mode25d" title="Swap which mouse button pans and which one tilts"><img id="angleLockIcon" alt=""><span id="angleLockText">Pan</span></button>
   <button id="angleReset" class="mode25d">Default tilt</button>
   <button id="orbitLock" class="mode3d hidden" title="Swap which mouse button pans and which one orbits"><img id="orbitLockIcon" alt=""><span id="orbitLockText">Orbit</span></button>
   <div class="sep" id="trailingSep"></div>
@@ -2720,18 +2720,19 @@ let drag = null, down = null;
 // #flat mid-drag, cutting its pan short partway through the gesture.
 stage.addEventListener("pointerdown", e => {
   if (viewMode === "2d") return;
-  // Right button only means something in 3D, where it takes whichever of
-  // pan/orbit the left button isn't doing.
-  if (e.button !== 0 && !(e.button === 2 && viewMode === "3d")) return;
+  // Both buttons drag in 2.5D and 3D: the right one takes whichever job the
+  // left one isn't doing -- tilt in 2.5D, orbit in 3D.
+  if (e.button !== 0 && e.button !== 2) return;
   // What this drag does is settled now, at the press, not re-read on every
   // move -- so swapping the buttons mid-drag (middle-click) can't flip what the
   // hand is already doing partway through the gesture.
+  const leftPans = viewMode === "3d" ? orbitLocked : angleLocked;
   down = { x: e.clientX, y: e.clientY, id: e.pointerId,
-           pan: e.button === 2 ? !orbitLocked : orbitLocked };
+           pan: e.button === 2 ? !leftPans : leftPans };
 });
-// The right button is a drag here, so the browser's menu would only get in
-// the way of it. 2.5D and 2D don't use it and keep their menu.
-stage.addEventListener("contextmenu", e => { if (viewMode === "3d") e.preventDefault(); });
+// The right button is a drag in both camera views, so the browser's menu would
+// only interrupt it. 2D doesn't use the right button and keeps its menu.
+stage.addEventListener("contextmenu", e => { if (viewMode !== "2d") e.preventDefault(); });
 stage.addEventListener("pointermove", e => {
   if (!down) return;
   if (!drag) {
@@ -2777,7 +2778,7 @@ stage.addEventListener("pointermove", e => {
     return;
   }
   const s = FOV / cam.dist;
-  if (angleLocked) {
+  if (down.pan) {
     cam.tx -= (e.clientX - drag.x) / s; cam.x = cam.tx;
     cam.tu += (e.clientY - drag.y) / s / SIN; cam.u = cam.tu;
   } else {
@@ -3059,7 +3060,8 @@ function paintHint() {
   // 3D names both buttons, since each now does one of the two things.
   const lines = viewMode === "3d"
     ? [`drag to ${orbitLocked ? "pan" : "orbit"}`, `right-drag to ${orbitLocked ? "orbit" : "pan"}`]
-    : [`drag to ${viewMode === "2d" ? "pan" : (angleLocked ? "pan" : "tilt")}`];
+    : viewMode === "2d" ? ["drag to pan"]
+    : [`drag to ${angleLocked ? "pan" : "tilt"}`, `right-drag to ${angleLocked ? "tilt" : "pan"}`];
   document.getElementById("hint").innerHTML =
     [...lines, "wheel to zoom", "click any node to inspect it"]
       .map(t => `<span>${t}</span>`).join("\n");   // newline, not "": a flex container drops whitespace-only
