@@ -318,6 +318,10 @@
   .coat{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:1px 6px 1px 3px;
         color:#a89f8c;display:inline-flex;align-items:center;gap:3px}
   .coat img{width:15px;height:15px;display:block}
+  /* Note glyphs are 32px pixel art, so they are drawn at exactly half size --
+     an integer reduction -- and told not to interpolate. At 15px the browser
+     resamples on a fractional ratio, which softens the black outline. */
+  .coat.note img{width:16px;height:16px;image-rendering:pixelated}
   .note-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:1px}
   .mlist{font-size:12px;color:#9a927f;line-height:1.6}
   #go{width:100%;margin-top:12px;padding:8px;border-color:var(--cyan-dim);color:var(--cyan);font-weight:600}
@@ -793,7 +797,29 @@ function applyTheme(hex){
 const DATA = window.WDATA;
 const ICONS = window.ICONS, COATS = window.COATS;
 const MONSTER_ICONS = window.MONSTER_ICONS;
-const NOTE_ICONS = window.NOTE_ICONS;   // mhgu-editor's real note glyphs, not flat dots
+/* The game's own note glyph, not a drawn approximation. MHGU ships ONE white
+   quaver with a black outline in the common icon atlas (HD_cmn_icon_GSM_NOMIP,
+   inside ita/arc/resident_ita.arc, at the 32px grid cell 15,22) and tints it at
+   draw time, so there is no coloured set in the ROM -- these eight are that one
+   sprite with its draw-time tint applied. Extracted by the Collection Tracker;
+   scripts/extract-note-icons.py there documents the ARC -> TEX -> Tegra
+   deswizzle pipeline, and the PNGs are committed at docs/assets/notes.
+
+   These replace hand-authored SVGs, which drew the same eight colours but were
+   an approximation of the shape. window.NOTE_ICONS still carries them and is no
+   longer read.
+
+   Keyed by what the DATA says, so "Cyan" is the note displayed as Blue. */
+const NOTE_ICONS = {
+  White: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAgElEQVR42mNgGAWjYBQQD/4TwCPEAR++fEDB23ZuA2N6OGTAHYDXITA8YCExaByA7hBbO1swHr4OgPFhiZEeiXNwOoCeBdSgdQB9K6VRB9DDAXgT17B2ANaCBd1CGH/xssVgTE2HDA4H4LIQV2U0/B2AKxEOXwfgSoT0aJTS1QEAAUC8/3FSgPYAAAAASUVORK5CYII=",   // letter W
+  Purple: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAgElEQVR42mNgGAWjYBQQD/4TwCPEAWdc/qPg2caHwJgeDhlwB+B1CAwPWEgMGgegO8RE0BGMh68DYHxYYqRH4hycDqBnATVoHUDfSmnUAfRwAN7ENawdgLVgQbcQxu/WWwfG1HTI4HAALgtxVUbD3wG4EuHwdQCuREiPRildHQAALVFS5xHGQJwAAAAASUVORK5CYII=",   // letter P
+  Red: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAgElEQVR42mNgGAWjYBQQD/4TwCPEAf/T0lDwIV9fMKaHQwbcAXgdAsMDFhKDxgHoDnGUkgLj4esAGB+WGOmROAenA+hZQA1aB9C3Uhp1AD0cgDdxDWsHYC1Y0C2E8de5uoIxNR0yOByAy0JcldHwdwCuRDh8HYArEdKjUUpXBwAAseYuN3n06lUAAAAASUVORK5CYII=",   // letter R
+  Cyan: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAfElEQVR42mNgGAWjYBQQD/4TwCPFATP/o+KSQxBMB4cMuAPwOwSGBywkBo0D0B2i7gjBw9cBMD4sMdIhcQ5SB9CxgBq0DqBzpTTqADo4AH/iGs4OwF6woFsI42esg2AqOmSQOACXhbgqo+HvAFyJcPg6AFcipEOjlK4OAAC0WBLPRLO4yQAAAABJRU5ErkJggg==",   // letter B
+  Green: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAf0lEQVR42mNgGAWjYBQQD/4TwCPEATYbYlGwbqsbGNPDIQPuALwOgeEBC4lB4wB0h/DriIPx8HUAjA9LjPRInIPTAfQsoAatA+hbKY06gB4OwJu4hrUDsBYs6BbC+BoV9mBMTYcMDgfgshBXZTT8HYArEQ5fB+BKhPRolNLVAQDuR+fwEYg7TgAAAABJRU5ErkJggg==",   // letter G
+  Yellow: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAfElEQVR42mNgGAWjYBQQD/4TwCPEAc9Oo+J1syCYHg4ZcAfgdQgMD1hIDBoHoDvEyhiCh68DYHxYYqRH4hycDqBnATVoHUDfSmnUAfRwAN7ENawdgLVgQbcQxp/TBcHUdMjgcAAuC3FVRsPfAbgS4fB1AK5ESI9GKV0dAAA5QCAnEFtwJQAAAABJRU5ErkJggg==",   // letter Y
+  "Sky Blue": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAgElEQVR42mNgGAWjYBQQD/4TwCPEAWln/qNg39mHwJgeDhlwB+B1CAwPWEgMGgegO0TKxBGMh68DYHxYYqRH4hycDqBnATVoHUDfSmnUAfRwAN7ENawdgLVgQbcQxnftXgfG1HTI4HAALgtxVUbD3wG4EuHwdQCuREiPRildHQAAdtdlPzcUnUMAAAAASUVORK5CYII=",   // letter C
+  Orange: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAfElEQVR42mNgGAWjYBQQD/4TwCPEAf9nouJDJRBMD4cMuAPwOgSGBywkBo0D0B3iqA7Bw9cBMD4sMdIjcQ5OB9CzgBq0DqBvpTTqAHo4AG/iGtYOwFqwoFsI46/LgGBqOmRwOACXhbgqo+HvAFyJcPg6AFcipEejlK4OAADHVxLPNXU4sQAAAABJRU5ErkJggg==",   // letter O
+};
 
 /* ---------------- per-class model ----------------
    Each weapon class is its own graph, layout and component set, so switching
@@ -3236,11 +3262,21 @@ function siegeCol(name) {
    has to be rewritten inside the embedded weapon table. */
 const NOTE_LABEL = { Cyan: "Blue" };
 const noteName = n => NOTE_LABEL[n] || n;
+/* Every swatch is its own glyph's fill, not a guess at what the name means --
+   a teal swatch beside a blue icon is what exposed the naming bug, and the
+   other seven were off in the same way, just less visibly.
+
+   These eight are confirmed twice over and independently: they are the fills
+   of this app's own note SVGs, and they are what the Collection Tracker got by
+   extracting the game's atlas and applying its draw-time tints. The ROM never
+   stores or names them -- it ships one white quaver and colours it in code --
+   so two separate derivations agreeing channel for channel is the strongest
+   evidence these colours can have. Both apps now draw from this one palette.
+
+   Keyed by what the DATA says, so "Cyan" here is the note displayed as Blue. */
 const NOTE_COL = {
-  // Taken from the glyph itself rather than from the name, which is the whole
-  // point here — a teal swatch beside a blue icon was the giveaway.
-  White: "#eeeeee", Purple: "#a05ad0", Cyan: "#0099ff", "Sky Blue": "#6ab0f0",
-  Yellow: "#e8d020", Red: "#e04040", Green: "#4caf50", Orange: "#e08a2b",
+  White: "#f0f4f0", Purple: "#cc44ff", Cyan: "#0099ff", "Sky Blue": "#66ccff",
+  Yellow: "#e6cb00", Red: "#ff6666", Green: "#3cb05d", Orange: "#ff9900",
 };
 const noteCol = n => NOTE_COL[n] || "#d4d4d4";
 
@@ -3368,7 +3404,7 @@ function renderDetail() {
     n.sharp.map((row, i) => `<div class="sharp-wrap"><span class="sharp-label">${
       SHARP_BANDS[i]}</span>${sharpBar(row)}</div>`).join("")}`;
   if (n.notes && n.notes.length) h += `<div class="sect">Notes</div><div class="coats">${
-    n.notes.map(note => `<span class="coat" style="color:${noteCol(note)};border-color:${
+    n.notes.map(note => `<span class="coat note" style="color:${noteCol(note)};border-color:${
       noteCol(note)}55">${NOTE_ICONS[note] ? `<img src="${NOTE_ICONS[note]}" alt="">` : ""
       }${noteName(note)}</span>`).join("")}</div>`;
   if (n.ammo && n.ammo.length) {
