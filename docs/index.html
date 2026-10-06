@@ -321,7 +321,15 @@
   /* Note glyphs are 32px pixel art, so they are drawn at exactly half size --
      an integer reduction -- and told not to interpolate. At 15px the browser
      resamples on a fractional ratio, which softens the black outline. */
-  .coat.note img{width:16px;height:16px;image-rendering:pixelated}
+  /* Nudged up 2px. The sprite's art is bottom-flush -- it fills to row 31 of its
+     32px cell and leaves 6 rows empty at the top -- so centring the IMAGE leaves
+     the glyph itself low, 4px of room above and 1px below, which reads as the
+     note resting on the pill's bottom edge. The offset compensates for the
+     sprite's own asymmetry rather than padding the pill out, so note chips stay
+     the same height as every other one. Whole pixels, so the pixel art is never
+     resampled onto a half-pixel. */
+  .coat.note img{width:16px;height:16px;image-rendering:pixelated;
+                 position:relative;top:-2px}
   .note-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:1px}
   .mlist{font-size:12px;color:#9a927f;line-height:1.6}
   #go{width:100%;margin-top:12px;padding:8px;border-color:var(--cyan-dim);color:var(--cyan);font-weight:600}
