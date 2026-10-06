@@ -3226,8 +3226,20 @@ function siegeCol(name) {
 // Hunting Horn notes are literal colour names in the data ("White", "Sky Blue"),
 // the same set MHFU's NoteColorName maps note letters onto (WeaponViewModel.cs:580)
 // — here they're spelled out already, so this is direct CSS, not a derivation.
+/* Except one of those names is wrong. The data calls a note "Cyan", but the
+   game's own glyph for it is plainly blue — sampling the icon gives #0099ff,
+   against #66ccff for the note the data does call "Sky Blue". So this is the
+   blue note and the lighter one beside it is sky blue.
+
+   Renamed for DISPLAY only. The data keys stay as they are, so the colour and
+   icon lookups below still work off what the data actually says, and nothing
+   has to be rewritten inside the embedded weapon table. */
+const NOTE_LABEL = { Cyan: "Blue" };
+const noteName = n => NOTE_LABEL[n] || n;
 const NOTE_COL = {
-  White: "#eeeeee", Purple: "#a05ad0", Cyan: "#4ad0d0", "Sky Blue": "#6ab0f0",
+  // Taken from the glyph itself rather than from the name, which is the whole
+  // point here — a teal swatch beside a blue icon was the giveaway.
+  White: "#eeeeee", Purple: "#a05ad0", Cyan: "#0099ff", "Sky Blue": "#6ab0f0",
   Yellow: "#e8d020", Red: "#e04040", Green: "#4caf50", Orange: "#e08a2b",
 };
 const noteCol = n => NOTE_COL[n] || "#d4d4d4";
@@ -3358,7 +3370,7 @@ function renderDetail() {
   if (n.notes && n.notes.length) h += `<div class="sect">Notes</div><div class="coats">${
     n.notes.map(note => `<span class="coat" style="color:${noteCol(note)};border-color:${
       noteCol(note)}55">${NOTE_ICONS[note] ? `<img src="${NOTE_ICONS[note]}" alt="">` : ""
-      }${note}</span>`).join("")}</div>`;
+      }${noteName(note)}</span>`).join("")}</div>`;
   if (n.ammo && n.ammo.length) {
     const wide = n.ammo.some(x => x.caps.length > 1);
     h += `<div class="sect">Ammo</div><table class="ammo">${
