@@ -1933,6 +1933,99 @@ function classOf(n) {
 let dirty = true;
 const mark = () => { dirty = true; };
 
+/* ---------------- label placement ----------------
+   Which names can be drawn without landing on each other.
+
+   Zooming out does not shrink a label the way it shrinks the tree: the node's
+   scale is floored at .4 so the text stays legible, and by the time a whole
+   tree is in frame true perspective would be .047 -- the label is already
+   drawn some eight times larger than the scene says. Everything therefore
+   converges while the names stay their size, and they collide.
+
+   Spacing the tree out cannot help, which is worth saying because it is the
+   obvious move: the camera re-fits to whatever it is given, so multiplying
+   every coordinate by k multiplies the fit distance by k and the picture is
+   identical. Measured over the Azure Serpentblade tree at k = 1, 1.5, 2, 3 and
+   5: fourteen overlapping pairs at the fit distance in every case, 73 at three
+   times that in every case.
+
+   So names are placed instead of merely drawn: nearest first, each one kept
+   only if its box misses every box already kept. Zoomed in there is room and
+   everything shows; zoomed out the survivors thin out on their own. The one
+   you are reading and the line you have selected are placed first, so they are
+   never the ones dropped. */
+/* LBL_GAP covers two things at once. measureText does not account for the
+   label's .2px letter-spacing, so the modelled box ran 1.2 to 1.5px narrow
+   than what gets rendered and two names judged clear could still touch. And a
+   box sized exactly to the text leaves names rubbing shoulders even when they
+   do not strictly overlap. */
+const LBL_PAD = 10, LBL_GAP = 7, LBL_LINE = 1.45, LBL_CELL = 96;
+const _twCache = new Map();
+function textW(name, px) {
+  const k = px + "|" + name;
+  let w = _twCache.get(k);
+  if (w === undefined) {
+    const c = textW.ctx || (textW.ctx = document.createElement("canvas").getContext("2d"));
+    c.font = `600 ${px}px "MHFU","Segoe UI",system-ui,sans-serif`;
+    w = c.measureText(name).width;
+    _twCache.set(k, w);
+  }
+  return w;
+}
+/* A grid rather than every-pair: "Whole class" puts 958 nodes on screen and the
+   pairwise test is a per-frame cost that grows with the square of them. */
+function placeLabels(cands) {
+  const grid = new Map(), keep = new Set();
+  const cellsOf = b => {
+    const out = [];
+    for (let cx = Math.floor(b.x / LBL_CELL); cx <= Math.floor((b.x + b.w) / LBL_CELL); cx++)
+      for (let cy = Math.floor(b.y / LBL_CELL); cy <= Math.floor((b.y + b.h) / LBL_CELL); cy++)
+        out.push(cx + "," + cy);
+    return out;
+  };
+  for (const c of cands) {
+    const b = c.box;
+    let clear = true;
+    for (const cell of cellsOf(b)) {
+      const arr = grid.get(cell);
+      if (!arr) continue;
+      for (const o of arr) {
+        if (b.x < o.x + o.w && b.x + b.w > o.x && b.y < o.y + o.h && b.y + b.h > o.y) { clear = false; break; }
+      }
+      if (!clear) break;
+    }
+    if (!clear) continue;
+    keep.add(c.key);
+    for (const cell of cellsOf(b)) {
+      let arr = grid.get(cell);
+      if (!arr) grid.set(cell, arr = []);
+      arr.push(b);
+    }
+  }
+  return keep;
+}
+// The candidates for one frame, in the order they get to claim space.
+function labelCands(vis, scaleOf, selKey) {
+  const cands = [];
+  for (const v of vis) {
+    const par = v.n.parent && N.get(v.n.parent);
+    if (par && par.name === v.n.name) continue;      // a line keeps its name; label where it changes
+    const sc = scaleOf(v);
+    const px = v.cls === "cur" ? 29 : 25;
+    const w = (textW(v.n.name, px) + LBL_PAD + LBL_GAP) * sc,
+          h = (px * LBL_LINE + LBL_GAP) * sc;
+    cands.push({
+      key: v.n.key, sc,
+      box: { x: v.p.x - w / 2, y: v.p.y + (ICON_HALF_PX + 9) * sc, w, h },
+      // what must never be dropped, then nearest first
+      pri: v.n.key === selKey ? 0 : v.cls === "cur" ? 1 : 2,
+    });
+  }
+  cands.sort((a, b) => a.pri - b.pri || b.sc - a.sc);
+  return cands;
+}
+const ICON_HALF_PX = 44;
+
 function draw() {
   if (viewMode === "3d") { draw3d(); requestAnimationFrame(draw); return; }
   // 2D is static — the picture is already on screen and only moves when the
@@ -2059,10 +2152,12 @@ function draw() {
     layer.appendChild(el); pool.push(el);
   }
   const selK = sel();
+  const scaleOf = v => viewMode === "2d" ? Math.max(.4, Math.min(1.4, zoom2d))
+    : Math.max(.4, Math.min(1.2, v.p.zv ? DIST / v.p.zv : 1));
+  const labelOk = placeLabels(labelCands(vis, scaleOf, selK));
   vis.forEach((v, i) => {
     const el = pool[i], a = ahead.get(v.n.key);
-    const sc = viewMode === "2d" ? Math.max(.4, Math.min(1.4, zoom2d))
-      : Math.max(.4, Math.min(1.2, v.p.zv ? DIST / v.p.zv : 1));
+    const sc = scaleOf(v);
     el._key = v.n.key;
     el.style.left = v.p.x + "px"; el.style.top = v.p.y + "px";
     el.style.zIndex = 1000 + i;
@@ -2125,15 +2220,11 @@ function draw() {
     // A weapon keeps its name for several levels, so labelling every node just
     // repeats it up the lane. Label where the name changes — the start of a
     // line and each rename — plus whatever you are on or looking at.
-    const par = v.n.parent && N.get(v.n.parent);
-    const renamed = !par || par.name !== v.n.name;
-    // Every node is labelled. A line keeps its name across several levels, so
-    // the continuation nodes show level and attack instead of repeating it —
-    // that's redundancy removed, not information withheld. The only cut-off is
-    // legibility: below this scale the text would be a few pixels tall.
-    const show = sc > .3;
+    // A line keeps its name across several levels, so only the node where the
+    // name changes is a candidate; placeLabels then decides which candidates
+    // actually have room. See the note above draw().
     const lbl = el.children[1];
-    lbl.textContent = show && renamed ? v.n.name : "";
+    lbl.textContent = labelOk.has(v.n.key) ? v.n.name : "";
     lbl.style.fontSize = (v.cls === "cur" ? 29 : 25) + "px";
   });
   for (let i = vis.length; i < pool.length; i++) pool[i].className = "node hidden";
@@ -2282,9 +2373,11 @@ function draw3d() {
     layer.appendChild(el); pool.push(el);
   }
   const selK = sel();
+  const scaleOf3 = v => Math.max(.35, Math.min(1.3, DIST / v.p.zv));
+  const labelOk3 = placeLabels(labelCands(vis, scaleOf3, selK));
   vis.forEach((v, i) => {
     const el = pool[i], a = ahead.get(v.n.key);
-    const sc = Math.max(.35, Math.min(1.3, DIST / v.p.zv));
+    const sc = scaleOf3(v);
     el._key = v.n.key;
     el.style.left = v.p.x + "px"; el.style.top = v.p.y + "px";
     el.style.zIndex = 1000 + i;
@@ -2340,11 +2433,8 @@ function draw3d() {
       el.children[0].firstChild.src = (ICONS[CLASS] || {})[r] || "";
       el._rar = r; el._cls = CLASS;
     }
-    const par = v.n.parent && N.get(v.n.parent);
-    const renamed = !par || par.name !== v.n.name;
-    const show = sc > .32;
     const lbl = el.children[1];
-    lbl.textContent = show && renamed ? v.n.name : "";
+    lbl.textContent = labelOk3.has(v.n.key) ? v.n.name : "";
     lbl.style.fontSize = (v.cls === "cur" ? 29 : 25) + "px";
   });
   for (let i = vis.length; i < pool.length; i++) pool[i].className = "node hidden";
