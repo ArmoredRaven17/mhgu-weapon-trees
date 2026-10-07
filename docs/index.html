@@ -3170,8 +3170,21 @@ document.getElementById("angleReset").onclick = () => setPitch(TILT);
 const PAL = {
   ele: { Fire: "#ff8a5c", Water: "#6cb8ff", Thunder: "#ffd85c", Ice: "#9adcff", Dragon: "#b48aff" },
   status: { Poison: "#c6a3ce", Paralysis: "#f8cf63", Sleep: "#9cdef8", Blast: "#b5d772" },
-  // Unused by Bow — here so the other classes inherit one table rather than
-  // starting their own. Impact and Power are mine; the rest reuse the above.
+  /* Here so the other classes inherit one table rather than starting their own;
+     Bow is the one class that doesn't read it. Switch Axe and Charge Blade do.
+
+     Only three of these are grounded: Dragon is ele.Dragon, and Poison and
+     Paralysis are status', so they match the coating art exactly. Impact,
+     Power, Element and Exhaust are CHOSEN. Exhaust especially looks like it
+     reuses status.Sleep #9cdef8 and does not -- it is 36 away in RGB.
+
+     The ROM does have a real table for five of them (rodata 0x16a76b0, decoded
+     in mhgu-armor-viewer as effects/w08-shells.json): Power #ff1400, Element
+     #29c774, Paralysis #e8bb00, Exhaust #366bff, Poison #6428ff, with no entry
+     for Dragon and none for Impact, which is Charge Blade's. Not adopted: those
+     are the phial BURST colours, the particle effect, and the game never tints
+     the phial text at all -- and its Poison is a blue-violet that would put
+     Poison phials at odds with Poison status inside this very pane. */
   phial: { Impact: "#b9c2cc", Power: "#de4c5a", Element: "#7fd4c4",
            Dragon: "#b48aff", Poison: "#c6a3ce", Paralysis: "#f8cf63", Exhaust: "#9cbafe" },
 };
