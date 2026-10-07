@@ -165,7 +165,7 @@
      behind them — a scrim guarantees contrast the way .swatch span does in the
      randomizer, instead of relying on a text-shadow to fight whatever is under
      it. Inline-block so it hugs the text rather than boxing the whole column. */
-  .node .lbl,.node .sub{
+  .node .lbl{
     display:inline-block; background:rgba(0,0,0,.55);
     border-radius:4px; padding:0 5px;
   }
@@ -173,9 +173,7 @@
     margin-top:9px; white-space:nowrap; font-weight:600; letter-spacing:.2px;
     text-shadow:0 1px 2px #000;
   }
-  .node .sub{font-size:.78em;color:var(--muted);font-variant-numeric:tabular-nums;
-             margin-top:2px}
-  .node .lbl:empty,.node .sub:empty{display:none}
+  .node .lbl:empty{display:none}
 
   /* The icon carries rarity; the frame around it carries where you are. */
   .node.past .dot{border-color:rgba(240,194,100,.4);background:rgba(240,194,100,.07)}
@@ -230,8 +228,6 @@
                        paint-order:stroke;stroke:#000;stroke-width:6px}
   #flat .lb{font-size:25px;font-weight:600;paint-order:stroke;stroke:#000;
             stroke-width:3px;stroke-linejoin:round}
-  #flat .lv{font-size:19px;fill:var(--muted);paint-order:stroke;stroke:#000;stroke-width:4px;
-            font-variant-numeric:tabular-nums}
   #flat .hit{fill:transparent;stroke:transparent;stroke-width:1;cursor:pointer}
   #flat .nd:hover .hit{fill:var(--film);stroke:#c8bfa8}
   /* Stroke and width are set per node in paint2d — white for the selection,
@@ -2050,7 +2046,7 @@ function draw() {
     // shape (0 = dot, 1 = label, 2 = sub) and dotEl.firstChild is still the img
     // -- both are indexed by position elsewhere in this file.
     el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>' +
-      '<div class="lbl"></div><div class="sub"></div>';
+      '<div class="lbl"></div>';
     el.addEventListener("click", ev => {
       ev.stopPropagation();
       // The second click of a double-click is part of the FIRST click's gesture.
@@ -2136,10 +2132,9 @@ function draw() {
     // that's redundancy removed, not information withheld. The only cut-off is
     // legibility: below this scale the text would be a few pixels tall.
     const show = sc > .3;
-    const lbl = el.children[1], sub = el.children[2];
+    const lbl = el.children[1];
     lbl.textContent = show && renamed ? v.n.name : "";
     lbl.style.fontSize = (v.cls === "cur" ? 29 : 25) + "px";
-    sub.textContent = show ? `LV${v.n.lv} · ${v.n.raw}` : "";
   });
   for (let i = vis.length; i < pool.length; i++) pool[i].className = "node hidden";
   requestAnimationFrame(draw);
@@ -2274,7 +2269,7 @@ function draw3d() {
     // shape (0 = dot, 1 = label, 2 = sub) and dotEl.firstChild is still the img
     // -- both are indexed by position elsewhere in this file.
     el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>' +
-      '<div class="lbl"></div><div class="sub"></div>';
+      '<div class="lbl"></div>';
     el.addEventListener("click", ev => {
       ev.stopPropagation();
       // The second click of a double-click is part of the FIRST click's gesture.
@@ -2348,10 +2343,9 @@ function draw3d() {
     const par = v.n.parent && N.get(v.n.parent);
     const renamed = !par || par.name !== v.n.name;
     const show = sc > .32;
-    const lbl = el.children[1], sub = el.children[2];
+    const lbl = el.children[1];
     lbl.textContent = show && renamed ? v.n.name : "";
     lbl.style.fontSize = (v.cls === "cur" ? 29 : 25) + "px";
-    sub.textContent = show ? `LV${v.n.lv} · ${v.n.raw}` : "";
   });
   for (let i = vis.length; i < pool.length; i++) pool[i].className = "node hidden";
 }
@@ -2384,8 +2378,8 @@ const FZ_MIN = .04, FZ_MAX = 2.4;
 // the name is drawn to the RIGHT of the icon, so a lane has to clear its own
 // icon, its text, and a gutter before the next lane's icon begins.
 const LBL_X = 56, ICON_HALF = 44, GUTTER = 26;
-// Widest label in a set, measured in the font it will actually be drawn in
-// rather than guessed from character counts — "Type 41 Wyvernator" and
+// Widest weapon name in a set, measured in the font it will actually be drawn
+// in rather than guessed from character counts — "Type 41 Wyvernator" and
 // "Despot's Blackstorm" are far wider than a per-character estimate suggests.
 function widestLabel(nodes) {
   const c = widestLabel.ctx ||
@@ -2393,8 +2387,6 @@ function widestLabel(nodes) {
   let w = 0;
   c.font = '600 25px "MHFU","Segoe UI",system-ui,sans-serif';
   for (const n of nodes) w = Math.max(w, c.measureText(n.name).width);
-  c.font = '19px "MHFU","Segoe UI",system-ui,sans-serif';
-  for (const n of nodes) w = Math.max(w, c.measureText(`LV${n.lv} · ${n.raw}`).width);
   return w;
 }
 // Tightest horizontal gap between two nodes sharing a row, in layout units.
@@ -2457,7 +2449,6 @@ function build2d() {
     `<rect class="hit" x="-48" y="-48" width="96" height="96" rx="22"/>` +
     `<use href="#fi${rarOf(n)}" x="-44" y="-44"/>` +
     `<text class="lb" x="56" y="-4" fill="${rarCol(n)}">${escAttr(n.name)}</text>` +
-    `<text class="lv" x="56" y="20">LV${n.lv} · ${n.raw}</text>` +
     `<text class="tick" x="24" y="-20">&#10003;</text>` +
     `<circle class="cutmark" cx="-40" cy="40" r="13"/></g>`).join("");
 
