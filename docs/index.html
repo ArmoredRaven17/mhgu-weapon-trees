@@ -291,6 +291,23 @@
   .chip.opt{border-color:var(--cyan-dim);color:var(--cyan)}
   .sect{margin:12px 0 5px;font-size:10.5px;letter-spacing:1.1px;text-transform:uppercase;
         color:var(--text-dim);opacity:.8;padding-top:5px;padding-bottom:4px}
+  /* Collapsible sections. <details>/<summary> rather than a div and a click
+     handler: it toggles, takes focus and announces its state on its own, and
+     keeps working if the script that remembers the state ever fails. */
+  details.sx > summary.sect{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;
+        user-select:none;margin-bottom:0}
+  details.sx > summary.sect::-webkit-details-marker{display:none}
+  details.sx > summary.sect::before{content:"";flex:0 0 auto;width:0;height:0;
+        border-left:4px solid currentColor;border-top:3.5px solid transparent;
+        border-bottom:3.5px solid transparent;transition:transform .12s ease;transform-origin:25% 50%}
+  details.sx[open] > summary.sect::before{transform:rotate(90deg)}
+  details.sx > summary.sect:hover{opacity:1}
+  /* How much a shut section is hiding -- a collapsed "Ammo" is useless if it
+     doesn't say there are fifteen rows behind it. */
+  details.sx > summary.sect .cnt{margin-left:auto;font-size:10px;opacity:.75;
+        font-variant-numeric:tabular-nums;letter-spacing:.4px}
+  details.sx[open] > summary.sect .cnt{opacity:.45}
+  details.sx > :last-child{margin-bottom:6px}
   table.stats{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
   table.stats td{padding:2px 0;font-size:13px}
   table.stats td:first-child{color:var(--muted)}
@@ -1799,6 +1816,17 @@ const FILTER_DIM = .16, FILTER_DIM_LIT = .5;
 // silently faded out of the picture.
 const filterHit = n => !madeFilter || !n ||
   (madeFilter === "made" ? isMade(n) : !isMade(n));
+
+/* Which sections the reader has shut, by title. Only their own choices are
+   stored: a section they never touched is left to the size rule below, so the
+   default can change later without being frozen by an old visit. */
+const SECT_KEY = "mhgu-trees-sections";
+let sectShut = {};
+try { sectShut = JSON.parse(localStorage.getItem(SECT_KEY) || "{}") || {}; } catch (e) {}
+// Above this many rows a section starts shut. Only Ammo reaches it today (15,
+// against 8 for the next largest) and Ammo is what makes a bowgun's pane the
+// tallest in the app -- 956px where a Great Sword is 520.
+const SECT_BIG = 8;
 
 const MADE_KEY = "mhgu-trees-made";
 let made = new Set();
@@ -3512,7 +3540,32 @@ function renderDetail() {
 
   if (c && options(c).includes(n.key))
     h += `<button id="go">Upgrade to ${n.name}</button>`;
-  box.innerHTML = h;
+  /* Each `<div class="sect">Title</div>` and everything up to the next one
+     becomes one collapsible block. Done here, over the finished string, rather
+     than at the ten places that emit a section: those are template literals
+     whose bodies would each need an opening and a closing tag threaded through
+     them, and any section added later would silently not collapse. */
+  box.innerHTML = h.replace(
+    /<div class="sect">([^<]*)<\/div>([\s\S]*?)(?=<div class="sect">|$)/g,
+    (_, title, body) => `<details class="sx" data-s="${escAttr(title)}">` +
+      `<summary class="sect">${title}<span class="cnt"></span></summary>${body}</details>`);
+  for (const d of box.querySelectorAll("details.sx")) {
+    const body = d.querySelector("table, div");
+    const rows = body
+      ? (body.tagName === "TABLE" ? body.querySelectorAll("tr:not(.hd)").length
+                                  : body.children.length)
+      : 0;
+    const title = d.dataset.s;
+    d.open = title in sectShut ? !sectShut[title] : rows <= SECT_BIG;
+    const cnt = d.querySelector(".cnt");
+    if (cnt && rows > 1) cnt.textContent = rows;
+    // `toggle` doesn't bubble, so these are wired per element rather than
+    // delegated. There are at most ten.
+    d.ontoggle = () => {
+      sectShut[title] = !d.open;
+      try { localStorage.setItem(SECT_KEY, JSON.stringify(sectShut)); } catch (e) {}
+    };
+  }
   const chk = document.getElementById("madeChk");
   if (chk) chk.onchange = () => setMade(n, chk.checked);
   const uh = document.getElementById("unsnipHere");
