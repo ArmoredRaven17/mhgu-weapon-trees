@@ -302,11 +302,6 @@
         border-bottom:3.5px solid transparent;transition:transform .12s ease;transform-origin:25% 50%}
   details.sx[open] > summary.sect::before{transform:rotate(90deg)}
   details.sx > summary.sect:hover{opacity:1}
-  /* How much a shut section is hiding -- a collapsed "Ammo" is useless if it
-     doesn't say there are fifteen rows behind it. */
-  details.sx > summary.sect .cnt{margin-left:auto;font-size:10px;opacity:.75;
-        font-variant-numeric:tabular-nums;letter-spacing:.4px}
-  details.sx[open] > summary.sect .cnt{opacity:.45}
   details.sx > :last-child{margin-bottom:6px}
   table.stats{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
   table.stats td{padding:2px 0;font-size:13px}
@@ -3516,24 +3511,16 @@ function renderDetail() {
     /<div class="sect">([^<]*)<\/div>([\s\S]*?)(?=<div class="sect">|$)/g,
     (_, title, body) => `<details class="sx" data-s="${escAttr(title)}"${
       sectShut[title] === false ? " open" : ""}>` +
-      `<summary class="sect">${title}<span class="cnt"></span></summary>${body}</details>`);
+      `<summary class="sect">${title}</summary>${body}</details>`);
   for (const d of box.querySelectorAll("details.sx")) {
-    const body = d.querySelector("table, div");
-    const rows = body
-      ? (body.tagName === "TABLE" ? body.querySelectorAll("tr:not(.hd)").length
-                                  : body.children.length)
-      : 0;
     const title = d.dataset.s;
     /* The open state is already on the element, set while the HTML was built:
        shut unless the reader opened it before. Every section, not just the big
-       ones, so the pane opens at a fixed short height whatever the class and
-       reads as a contents list -- each title with the number of rows behind it
-       -- rather than a wall that merely happens to be shorter on a Great Sword.
+       ones, so the pane opens at a fixed short height whatever the class rather
+       than a wall that merely happens to be shorter on a Great Sword.
 
        Deliberately NOT set as a property here. Doing that fires a toggle, and
        this handler cannot tell one of those from a real click. */
-    const cnt = d.querySelector(".cnt");
-    if (cnt && rows) cnt.textContent = rows;
     // `toggle` doesn't bubble, so these are wired per element rather than
     // delegated. There are at most ten.
     d.ontoggle = () => {
