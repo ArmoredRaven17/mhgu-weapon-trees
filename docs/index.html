@@ -422,13 +422,6 @@
   #tree:hover,#wclass:hover,#viewSel:hover,#shapeSel:hover,#madeSel:hover{background:var(--film-hi)}
   #tree option,#wclass option,#viewSel option,#shapeSel option,#madeSel option{background:var(--bg2);color:var(--text)}
   #wclass option:disabled,#viewSel option:disabled,#shapeSel option:disabled{color:var(--muted)}
-  /* Stacked rather than one dot-separated line. Run across, it was wide
-     enough to reach under the bottom bar -- and the bar grew, since it now
-     wraps to two rows and spans nearly the full width on a narrow window.
-     A column is short enough to sit clear on a wide screen, and placeKey()
-     lifts it above the bar on the narrow ones where it still would not. */
-  #hint{position:fixed;bottom:16px;left:16px;font-size:11.5px;color:var(--muted);
-        opacity:.7;line-height:1.55;display:flex;flex-direction:column;align-items:flex-start}
   #key{right:16px;bottom:16px;left:auto;top:auto;padding:7px 9px}
   #key .klab{margin-bottom:4px}
   /* Vertical offset is set by placeKey() — the bar's height and width both
@@ -622,7 +615,6 @@
   <div class="ramp" id="ramp"></div>
 </div>
 
-<div id="hint"></div>   <!-- filled by paintHint(); what a drag does varies -->
 
 <div id="start" class="hidden"><div class="box">
   <h2>Start a run</h2>
@@ -1662,11 +1654,12 @@ function resize() {
 // The rarity key sits in the bottom-right corner, but the bar is centred and
 // grows with its dropdowns. Rather than guess a breakpoint, measure: if the two
 // would overlap horizontally, lift the key clear of the bar.
-/* The rarity key and the hint both sit in the bottom corners, which is where
-   the bar reaches once it wraps. One rule covers both: measure, and only lift
-   if the bar genuinely overlaps. Testing rather than assuming matters because
-   the bar's width varies with the view -- 3D drops two buttons and adds one --
-   so a fixed breakpoint would lift these on layouts that had room. */
+/* The rarity key sits in a bottom corner, which is where the bar reaches once
+   it wraps. Measure, and only lift if the bar genuinely overlaps: the bar's
+   width varies with the view -- 3D drops two buttons and adds one -- so a fixed
+   breakpoint would lift it on layouts that had room.
+   Takes a list of obstacles because it used to clear the hint as well as the
+   bar; one is all that is left. */
 function liftClear(el, obstacles) {
   el.style.bottom = "16px";
   for (const o of obstacles) {
@@ -1679,14 +1672,7 @@ function liftClear(el, obstacles) {
   }
 }
 function placeKey() {
-  const bar = document.getElementById("bar"), key = document.getElementById("key");
-  liftClear(key, [bar]);
-  /* The hint clears the bar and THEN the key, in that order and re-measured
-     between the two. On a narrow window the key has just been lifted into the
-     same band the hint is heading for, so clearing one obstacle can move it
-     straight onto another -- checking both against the original position would
-     miss it. */
-  liftClear(document.getElementById("hint"), [bar, key]);
+  liftClear(document.getElementById("key"), [document.getElementById("bar")]);
 }
 addEventListener("resize", () => { resize(); placeKey(); mark(); }); resize();
 
@@ -1820,13 +1806,14 @@ const filterHit = n => !madeFilter || !n ||
 /* Which sections the reader has shut, by title. Only their own choices are
    stored: a section they never touched is left to the size rule below, so the
    default can change later without being frozen by an old visit. */
-const SECT_KEY = "mhgu-trees-sections";
+/* v2: the first build of this wrote entries nobody chose. It set `open` on the
+   element AFTER inserting it, and a toggle event -- which is queued as a task,
+   so it arrives once the handler is attached -- then recorded that as a
+   reader's preference. The key is bumped so those entries don't survive to
+   hold sections open against the collapsed default. */
+const SECT_KEY = "mhgu-trees-sections2";
 let sectShut = {};
 try { sectShut = JSON.parse(localStorage.getItem(SECT_KEY) || "{}") || {}; } catch (e) {}
-// Above this many rows a section starts shut. Only Ammo reaches it today (15,
-// against 8 for the next largest) and Ammo is what makes a bowgun's pane the
-// tallest in the app -- 956px where a Great Sword is 520.
-const SECT_BIG = 8;
 
 const MADE_KEY = "mhgu-trees-made";
 let made = new Set();
@@ -2995,7 +2982,6 @@ function applyViewMode() {
   if (!is2d) flatTip.style.display = "none";
   updateWholeClassOption();
   fitActive(activeRoot);
-  paintHint();
   mark(); paint(); placeKey();
 }
 viewSel.onchange = () => { viewMode = viewSel.value; applyViewMode(); };
@@ -3121,27 +3107,9 @@ function paintAngleLock() {
 function toggleAngleLock() {
   angleLocked = !angleLocked;
   paintAngleLock();
-  paintHint();
   placeKey();
 }
-/* Dragging now does one of three things depending on the view and its lock, so
-   the hint has to say which — a fixed "drag to pan" was already wrong in 3D
-   (it orbits) and would contradict the Orbit button outright. */
-function paintHint() {
-  // 3D names both buttons, since each now does one of the two things.
-  const lines = viewMode === "3d"
-    ? [`drag to ${orbitLocked ? "pan" : "orbit"}`, `right-drag to ${orbitLocked ? "orbit" : "pan"}`]
-    : viewMode === "2d" ? ["drag to pan"]
-    : [`drag to ${angleLocked ? "pan" : "tilt"}`, `right-drag to ${angleLocked ? "tilt" : "pan"}`];
-  document.getElementById("hint").innerHTML =
-    [...lines, "wheel to zoom", "click any node to inspect it"]
-      .map(t => `<span>${t}</span>`).join("\n");   // newline, not "": a flex container drops whitespace-only
-  // text nodes so the layout is untouched, but without it textContent runs the
-  // three lines together -- what a screen reader says and what a copy yields.
-  // Its width changes with the verb, and whether it clears the bar depends on
-  // that width, so the two have to be worked out together.
-  placeKey();
-}
+
 angleLockBtn.onclick = toggleAngleLock;
 paintAngleLock();
 
@@ -3166,7 +3134,7 @@ function paintOrbitLock() {
   orbitLockText.textContent = orbitLocked ? "Pan" : "Orbit";
   orbitLockBtn.classList.toggle("on", !orbitLocked);
 }
-function toggleOrbitLock() { orbitLocked = !orbitLocked; paintOrbitLock(); paintHint(); placeKey(); }
+function toggleOrbitLock() { orbitLocked = !orbitLocked; paintOrbitLock(); placeKey(); }
 orbitLockBtn.onclick = toggleOrbitLock;
 paintOrbitLock();
 pinToggleWidths();
@@ -3184,7 +3152,6 @@ if (document.fonts) document.fonts.load("1em MHFU").then(() => {
   selects.forEach(s => getComputedStyle(s).fontFamily);
   selects.forEach(s => { s.style.fontFamily = ""; });
 }, () => {});
-paintHint();
 document.getElementById("angleReset").onclick = () => setPitch(TILT);
 
 /* ---------------- panels ---------------- */
@@ -3547,7 +3514,8 @@ function renderDetail() {
      them, and any section added later would silently not collapse. */
   box.innerHTML = h.replace(
     /<div class="sect">([^<]*)<\/div>([\s\S]*?)(?=<div class="sect">|$)/g,
-    (_, title, body) => `<details class="sx" data-s="${escAttr(title)}">` +
+    (_, title, body) => `<details class="sx" data-s="${escAttr(title)}"${
+      sectShut[title] === false ? " open" : ""}>` +
       `<summary class="sect">${title}<span class="cnt"></span></summary>${body}</details>`);
   for (const d of box.querySelectorAll("details.sx")) {
     const body = d.querySelector("table, div");
@@ -3556,9 +3524,16 @@ function renderDetail() {
                                   : body.children.length)
       : 0;
     const title = d.dataset.s;
-    d.open = title in sectShut ? !sectShut[title] : rows <= SECT_BIG;
+    /* The open state is already on the element, set while the HTML was built:
+       shut unless the reader opened it before. Every section, not just the big
+       ones, so the pane opens at a fixed short height whatever the class and
+       reads as a contents list -- each title with the number of rows behind it
+       -- rather than a wall that merely happens to be shorter on a Great Sword.
+
+       Deliberately NOT set as a property here. Doing that fires a toggle, and
+       this handler cannot tell one of those from a real click. */
     const cnt = d.querySelector(".cnt");
-    if (cnt && rows > 1) cnt.textContent = rows;
+    if (cnt && rows) cnt.textContent = rows;
     // `toggle` doesn't bubble, so these are wired per element rather than
     // delegated. There are at most ten.
     d.ontoggle = () => {
