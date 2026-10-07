@@ -445,7 +445,7 @@
   <h2>How to use</h2>
   <p><strong>1. Pick a class.</strong> The bottom bar's first dropdown switches weapon class; the second jumps straight to one line ("tree") instead of drawing the whole class at once — useful since some classes run to dozens of lines.</p>
   <p><strong>2. Pick a view.</strong> 2.5D is a tilted map you pan and zoom across (left-drag to pan, right-drag to tilt). 2D flattens that same layout with no tilt. 3D is a free orbit around one tree at a time in real 3D space (left-drag to pan, right-drag to orbit, wheel to zoom, click a node to re-center the orbit on it). The camera button names what a left-drag does right now, <strong>Pan</strong> or <strong>Orbit</strong>, and the right button always does the other. Click it, or middle-click the stage, to swap the two buttons over. The 2.5D bar carries the same control with <strong>Pan</strong> and <strong>Tilt</strong>, and middle-click swaps whichever pair the view you are in has.</p>
-  <p><strong>3. Click any node</strong> for its full stats — attack, affinity, slots, element, and whatever the class carries beyond that: charge levels and coatings for Bow, ammo and internal (siege too, for Heavy Bowgun), phials for Switch Axe and Charge Blade, notes for Hunting Horn, shelling for Gunlance, sharpness for every Blademaster weapon, kinsect name and type for Insect Glaive.</p>
+  <p><strong>3. Click any node</strong> for its full stats — attack, affinity, slots, element, and whatever the class carries beyond that: charge levels and coatings for Bow, ammo and internal (siege too, for Heavy Bowgun), phials for Switch Axe and Charge Blade, notes for Hunting Horn, shot level for Gunlance, sharpness for every Blademaster weapon, kinsect name and type for Insect Glaive.</p>
   <p><strong>Snip</strong> &mdash; with a weapon selected, a small circle sits on each edge leading into and out of it. Click one to hide that branch and everything above it. The weapon below a cut gets a dashed ring; double-click it to restore that cut (or select it and press <strong>Restore</strong>), or use <strong>Restore all</strong> in the browsing panel.</p>
   <p><strong>Center On Node</strong> brings the weapon you have selected back to the middle; <strong>Center On Tree</strong> goes back out to the middle of the tree as a whole, which is where the view sat before you clicked anything. Neither changes how far in you are zoomed, and neither drops your selection. In 2.5D, the camera button reads <strong>Pan</strong> or <strong>Tilt</strong> for what a left-drag does right now, and the right button always does the other; <strong>Default tilt</strong> snaps back to the starting tilt.</p>
   <p class="muted">A weapon line that branches mid-upgrade stays open past the level it unlocks, matching the actual game mechanic — see About for how that's derived.</p>
@@ -3368,7 +3368,9 @@ function renderDetail() {
     const ph = phialParts(n.phial);
     rows.push(["Phial", tint(PAL.phial[ph.type] || "", ph.type) + (ph.value ? ` ${ph.value}` : ""), ""]);
   }
-  if (n.shell) rows.push(["Shelling", tint(shellCol(n.shell), n.shell), ""]);
+  // "Shot Level" is what the game calls this on the weapon info screen; the
+  // data field and the colour rule below keep MHFU's "shelling" wording.
+  if (n.shell) rows.push(["Shot Level", tint(shellCol(n.shell), n.shell), ""]);
   // No house source colours Cutting/Blunt anywhere; teal/magenta here is mine,
   // reusing the same two hues shotCol already uses for Pierce/Heavy.
   if (n.kinsectType) rows.push(["Kinsect", `${n.kinsectName} <span style="color:${
