@@ -103,6 +103,13 @@
   #nodes{position:absolute;inset:0;pointer-events:none}
   /* Snip controls: a plain circle for now, sitting on the edge itself halfway
      between the two weapons it would separate. */
+  #lnames{position:absolute;inset:0;pointer-events:none}
+  /* A weapon line's name, written along the line itself. Same scrim as the old
+     node labels, since it sits over the map with nothing behind it. */
+  .lname{position:absolute;white-space:nowrap;font-weight:600;letter-spacing:.2px;
+         background:rgba(0,0,0,.55);border-radius:4px;padding:0 5px;
+         text-shadow:0 1px 2px #000;transform-origin:50% 50%}
+  .lname.hidden{display:none}
   #snips{position:absolute;inset:0;pointer-events:none}
   #snips .snip{position:absolute;z-index:100000;pointer-events:auto;cursor:pointer;
         width:14px;height:14px;padding:0;margin:0;border-radius:50%;
@@ -165,15 +172,6 @@
      behind them — a scrim guarantees contrast the way .swatch span does in the
      randomizer, instead of relying on a text-shadow to fight whatever is under
      it. Inline-block so it hugs the text rather than boxing the whole column. */
-  .node .lbl{
-    display:inline-block; background:rgba(0,0,0,.55);
-    border-radius:4px; padding:0 5px;
-  }
-  .node .lbl{
-    margin-top:9px; white-space:nowrap; font-weight:600; letter-spacing:.2px;
-    text-shadow:0 1px 2px #000;
-  }
-  .node .lbl:empty{display:none}
 
   /* The icon carries rarity; the frame around it carries where you are. */
   .node.past .dot{border-color:rgba(240,194,100,.4);background:rgba(240,194,100,.07)}
@@ -551,6 +549,7 @@
 <div id="stage">
   <svg id="edges"></svg>
   <div id="nodes"></div>
+  <div id="lnames"></div>
   <div id="snips"></div>
   <!-- 2D lives entirely outside the camera renderer above: one SVG drawn once
        per tree, moved around with a CSS transform. -->
@@ -1933,6 +1932,62 @@ function classOf(n) {
 let dirty = true;
 const mark = () => { dirty = true; };
 
+/* ---------------- line names ----------------
+   One name per weapon LINE, written along the line, instead of one under every
+   weapon. Three things come out of that.
+
+   It is a third as many: Great Sword has 407 nodes where the name changes but
+   only 136 lines, and the median tree in it drops from three labels to one.
+
+   It suits the shape. A lane is long and narrow -- at the fit distance its
+   neighbours are about 42px away while a name is 70 to 110px wide -- so names
+   written across the lanes fight for room that isn't there, while names
+   written ALONG them use the length, which there is plenty of.
+
+   And it is the name you actually want: a line keeps one name for several
+   levels, so repeating it at each level was never telling you anything. */
+const lnameLayer = document.getElementById("lnames");
+const lnamePool = [];
+/* `vis` is already filtered to what is on screen, so a line is labelled from
+   the part of it you can see, not from where it would be if you could. */
+function drawLineNames(vis, scaleOf) {
+  const byLine = new Map();
+  for (const v of vis) {
+    let g = byLine.get(v.n.t);
+    if (!g) byLine.set(v.n.t, g = []);
+    g.push(v);
+  }
+  let i = 0;
+  for (const g of byLine.values()) {
+    g.sort((a, b) => a.n.lv - b.n.lv);
+    const a = g[0], b = g[g.length - 1];
+    const dx = b.p.x - a.p.x, dy = b.p.y - a.p.y;
+    const len = Math.hypot(dx, dy);
+    while (lnamePool.length <= i) {
+      const el = document.createElement("div");
+      el.className = "lname";
+      lnameLayer.appendChild(el);
+      lnamePool.push(el);
+    }
+    const el = lnamePool[i++];
+    el.className = "lname";
+    el.textContent = a.n.name;          // the base of the line, its lowest level
+    const sc = (scaleOf(a) + scaleOf(b)) / 2;
+    el.style.fontSize = (25 * sc).toFixed(1) + "px";
+    /* Along the line, but never upside down: past a quarter turn the text is
+       flipped end for end so it still reads left to right. A line too short on
+       screen to write along is left horizontal rather than squeezed. */
+    let deg = len > 40 ? Math.atan2(dy, dx) * 180 / Math.PI : 0;
+    if (deg > 90) deg -= 180;
+    else if (deg < -90) deg += 180;
+    el.style.left = (a.p.x + dx / 2) + "px";
+    el.style.top = (a.p.y + dy / 2) + "px";
+    el.style.transform = `translate(-50%,-50%) rotate(${deg.toFixed(1)}deg)`;
+    el.style.color = rarCol(a.n);
+  }
+  for (let k = i; k < lnamePool.length; k++) lnamePool[k].className = "lname hidden";
+}
+
 function draw() {
   if (viewMode === "3d") { draw3d(); requestAnimationFrame(draw); return; }
   // 2D is static — the picture is already on screen and only moves when the
@@ -2045,8 +2100,7 @@ function draw() {
     // The tick goes INSIDE .dot, after the img, so el.children keeps its
     // shape (0 = dot, 1 = label, 2 = sub) and dotEl.firstChild is still the img
     // -- both are indexed by position elsewhere in this file.
-    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>' +
-      '<div class="lbl"></div>';
+    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>';
     el.addEventListener("click", ev => {
       ev.stopPropagation();
       // The second click of a double-click is part of the FIRST click's gesture.
@@ -2125,17 +2179,9 @@ function draw() {
     // A weapon keeps its name for several levels, so labelling every node just
     // repeats it up the lane. Label where the name changes — the start of a
     // line and each rename — plus whatever you are on or looking at.
-    const par = v.n.parent && N.get(v.n.parent);
-    const renamed = !par || par.name !== v.n.name;
-    // Every node is labelled. A line keeps its name across several levels, so
-    // the continuation nodes show level and attack instead of repeating it —
-    // that's redundancy removed, not information withheld. The only cut-off is
-    // legibility: below this scale the text would be a few pixels tall.
-    const show = sc > .3;
-    const lbl = el.children[1];
-    lbl.textContent = show && renamed ? v.n.name : "";
-    lbl.style.fontSize = (v.cls === "cur" ? 29 : 25) + "px";
   });
+  drawLineNames(vis, v => viewMode === "2d" ? Math.max(.4, Math.min(1.4, zoom2d))
+    : Math.max(.4, Math.min(1.2, v.p.zv ? DIST / v.p.zv : 1)));
   for (let i = vis.length; i < pool.length; i++) pool[i].className = "node hidden";
   requestAnimationFrame(draw);
 }
@@ -2268,8 +2314,7 @@ function draw3d() {
     // The tick goes INSIDE .dot, after the img, so el.children keeps its
     // shape (0 = dot, 1 = label, 2 = sub) and dotEl.firstChild is still the img
     // -- both are indexed by position elsewhere in this file.
-    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>' +
-      '<div class="lbl"></div>';
+    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>';
     el.addEventListener("click", ev => {
       ev.stopPropagation();
       // The second click of a double-click is part of the FIRST click's gesture.
@@ -2340,13 +2385,8 @@ function draw3d() {
       el.children[0].firstChild.src = (ICONS[CLASS] || {})[r] || "";
       el._rar = r; el._cls = CLASS;
     }
-    const par = v.n.parent && N.get(v.n.parent);
-    const renamed = !par || par.name !== v.n.name;
-    const show = sc > .32;
-    const lbl = el.children[1];
-    lbl.textContent = show && renamed ? v.n.name : "";
-    lbl.style.fontSize = (v.cls === "cur" ? 29 : 25) + "px";
   });
+  drawLineNames(vis, v => Math.max(.35, Math.min(1.3, DIST / v.p.zv)));
   for (let i = vis.length; i < pool.length; i++) pool[i].className = "node hidden";
 }
 
@@ -2965,6 +3005,7 @@ function applyViewMode() {
   svg.style.display = is2d ? "none" : "";
   layer.style.display = is2d ? "none" : "";
   snipLayer.style.display = is2d ? "none" : "";
+  lnameLayer.style.display = is2d ? "none" : "";
   if (!is2d) flatTip.style.display = "none";
   updateWholeClassOption();
   fitActive(activeRoot);
