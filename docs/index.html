@@ -944,6 +944,35 @@ function options(n) {
 const stillOpen = n => (BRANCH.get(n.t) || []).filter(b => b.lv < n.lv);
 const unlockLv = key => { const n = N.get(key); const t = byId.get(n.t); return t && t.p ? t.p[1] : null; };
 
+/* How wide the step across has to be for a branch, in layout units: enough for
+   the name that will be written along it. A branch starts a line, so the name
+   is that weapon's own.
+
+   Proportional rather than one number for all: XGAP alone gave "Halberd" and
+   "Type 41 Wyvernator" the same 650 units, which is too much for one and far
+   too little for the other. GAP_PER_PX converts the name's width at the drawn
+   font into layout units; XGAP stays as the floor, so short names leave the
+   layout exactly as it was and only long ones push their neighbours out.
+
+   This cannot make every name fit at every zoom, and it is worth being clear
+   why: the connector is in layout units and shrinks as you pull back, while
+   the label is floored at .4 of its size and stops shrinking. The ratio only
+   holds at one distance. What it does buy is the right SHARE of the room --
+   long names get more of it than short ones, which a single XGAP never did. */
+const GAP_PER_PX = 3.7;        // ~650 for the median name, i.e. today's XGAP
+const _gapCache = new Map();
+function branchGap(n) {
+  let g = _gapCache.get(n.name);
+  if (g === undefined) {
+    const c = branchGap.ctx ||
+      (branchGap.ctx = document.createElement("canvas").getContext("2d"));
+    c.font = '600 25px "MHFU","Segoe UI",system-ui,sans-serif';
+    g = Math.max(XGAP, Math.round(c.measureText(n.name).width * GAP_PER_PX));
+    _gapCache.set(n.name, g);
+  }
+  return g;
+}
+
 /* ---------------- planar layout ----------------
    The tree is flat — it lies on the ground. Every line gets a tidy layout: the
    one you're on stays a straight lane running away from you, and each branch is
@@ -965,9 +994,10 @@ function layout() {
     let side = 1;
     for (const b of brs) {
       const e = place(b);
+      const gap = branchGap(N.get(b));
       let o;
-      if (side > 0) { o = max - e.min + XGAP; max = o + e.max; }
-      else { o = min - e.max - XGAP; min = o + e.min; }
+      if (side > 0) { o = max - e.min + gap; max = o + e.max; }
+      else { o = min - e.max - gap; min = o + e.min; }
       off.set(b, o);
       side = -side;
     }
