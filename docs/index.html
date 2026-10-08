@@ -141,6 +141,15 @@
   /* A made weapon is ticked on the map itself. Without that the tracker would
      only be readable one node at a time, through the detail pane, which is the
      opposite of what you want when the question is "what is left to build". */
+  /* Only the line you have selected carries these -- see draw(). Floored with
+     the node rather than scaled with the scene, because the point of them is to
+     be read. */
+  .node .lbl{
+    display:inline-block; margin-top:9px; padding:0 5px; border-radius:4px;
+    background:rgba(0,0,0,.55); white-space:nowrap; font-weight:600;
+    letter-spacing:.2px; text-shadow:0 1px 2px #000;
+  }
+  .node .lbl:empty{display:none}
   .node .tick{
     position:absolute; right:-7px; top:-7px; display:none;
     width:30px; height:30px; border-radius:50%;
@@ -1642,6 +1651,15 @@ const stage = document.getElementById("stage");
 const svg = document.getElementById("edges");
 const layer = document.getElementById("nodes");
 const snipLayer = document.getElementById("snips");
+/* A circle sits a little to the SIDE of its edge rather than squarely on it:
+   the line's name is written along the middle of that edge, and a circle on
+   top of the text clips it. Perpendicular to the edge, so it stays beside the
+   line it belongs to whichever way the line runs. */
+const SNIP_OFFSET = 14;
+function pushSnip(list, v, pp, mx, my) {
+  const dx = v.p.x - pp.x, dy = v.p.y - pp.y, L = Math.hypot(dx, dy) || 1;
+  list.push({ k: v.n.key, x: mx - dy / L * SNIP_OFFSET, y: my + dx / L * SNIP_OFFSET });
+}
 // Pooled like the nodes are, since they are repositioned every frame the camera moves.
 function placeSnips(list) {
   while (snipLayer.children.length < list.length) {
@@ -2115,7 +2133,7 @@ function draw() {
     if (!filterHit(v.n)) op = Math.min(op, lit ? FILTER_DIM_LIT : FILTER_DIM);
     const rp = route(par, v.n), d = pathD(rp);
     if (!d) continue;
-    if (wantsSnip(v.n)) { const [mx, my] = polyMid(rp); snipAt.push({ k: v.n.key, x: mx, y: my }); }
+    if (wantsSnip(v.n)) { const [mx, my] = polyMid(rp); pushSnip(snipAt, v, pp, mx, my); }
     // 2D's width scales directly off its own plain zoom — no FOV/DIST term,
     // since there's no lens here for that to mean anything about.
     const wScale = viewMode === "2d" ? Math.min(1.3, zoom2d + .3) : Math.min(1.3, v.p.s * DIST / FOV + .3);
@@ -2157,7 +2175,8 @@ function draw() {
     // The tick goes INSIDE .dot, after the img, so el.children keeps its
     // shape (0 = dot, 1 = label, 2 = sub) and dotEl.firstChild is still the img
     // -- both are indexed by position elsewhere in this file.
-    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>';
+    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>' +
+      '<div class="lbl"></div>';
     el.addEventListener("click", ev => {
       ev.stopPropagation();
       // The second click of a double-click is part of the FIRST click's gesture.
@@ -2233,9 +2252,15 @@ function draw() {
       el.children[0].firstChild.src = (ICONS[CLASS] || {})[r] || "";
       el._rar = r; el._cls = CLASS;
     }
-    // A weapon keeps its name for several levels, so labelling every node just
-    // repeats it up the lane. Label where the name changes — the start of a
-    // line and each rename — plus whatever you are on or looking at.
+    /* The weapons of the line you clicked, named individually -- the line label
+       gives you its base form, this gives you what it becomes. Only that line,
+       and only where the name actually changes, so a line that keeps one name
+       for five levels still says it once. */
+    const par = v.n.parent && N.get(v.n.parent);
+    const lbl = el.children[1];
+    lbl.textContent = selLine != null && v.n.t === selLine && (!par || par.name !== v.n.name)
+      ? v.n.name : "";
+    lbl.style.fontSize = (v.cls === "cur" ? 29 : 25) + "px";
   });
   /* The name goes on the FIRST leg of the branch's bend -- the step across at
      the parent's own level, where the line departs -- not the climb that
@@ -2333,13 +2358,13 @@ function draw3d() {
         const d = Math.hypot(v.n.x3 - par.x3, v.n.y3 - par.y3, v.n.z3 - par.z3) * .55;
         const cp = project3d(par.x3 + t.x * d, par.y3 + t.y * d, par.z3 + t.z * d);
         if (!cp) continue;
-        if (wantsSnip(v.n)) { const [mx, my] = qMid(pp, cp, v.p); snipAt.push({ k: v.n.key, x: mx, y: my }); }
+        if (wantsSnip(v.n)) { const [mx, my] = qMid(pp, cp, v.p); pushSnip(snipAt, v, pp, mx, my); }
         seg.push(`<path d="M${pp.x.toFixed(1)} ${pp.y.toFixed(1)} Q${cp.x.toFixed(1)} ${
           cp.y.toFixed(1)} ${v.p.x.toFixed(1)} ${v.p.y.toFixed(1)}" fill="none" ` +
           `stroke="${stroke}" stroke-width="${(w * wScale).toFixed(2)}" ` +
           `stroke-opacity="${op.toFixed(2)}" stroke-linecap="round"/>`);
       } else {
-        if (wantsSnip(v.n)) snipAt.push({ k: v.n.key, x: (pp.x + v.p.x) / 2, y: (pp.y + v.p.y) / 2 });
+        if (wantsSnip(v.n)) pushSnip(snipAt, v, pp, (pp.x + v.p.x) / 2, (pp.y + v.p.y) / 2);
         seg.push(`<line x1="${pp.x.toFixed(1)}" y1="${pp.y.toFixed(1)}" x2="${
           v.p.x.toFixed(1)}" y2="${v.p.y.toFixed(1)}" stroke="${stroke}" ` +
           `stroke-width="${(w * wScale).toFixed(2)}" stroke-opacity="${op.toFixed(2)}" ` +
@@ -2357,13 +2382,13 @@ function draw3d() {
                            par.y3 + t.y * STEP3 * .55,
                            par.z3 + t.z * STEP3 * .55);
       if (!cp) continue;
-      if (wantsSnip(v.n)) { const [mx, my] = qMid(pp, cp, v.p); snipAt.push({ k: v.n.key, x: mx, y: my }); }
+      if (wantsSnip(v.n)) { const [mx, my] = qMid(pp, cp, v.p); pushSnip(snipAt, v, pp, mx, my); }
       seg.push(`<path d="M${pp.x.toFixed(1)} ${pp.y.toFixed(1)} Q${cp.x.toFixed(1)} ${
         cp.y.toFixed(1)} ${v.p.x.toFixed(1)} ${v.p.y.toFixed(1)}" fill="none" ` +
         `stroke="${stroke}" stroke-width="${(w * wScale).toFixed(2)}" ` +
         `stroke-opacity="${op.toFixed(2)}" stroke-linecap="round"/>`);
     } else if (shape3d === "bush") {
-      if (wantsSnip(v.n)) snipAt.push({ k: v.n.key, x: (pp.x + v.p.x) / 2, y: (pp.y + v.p.y) / 2 });
+      if (wantsSnip(v.n)) pushSnip(snipAt, v, pp, (pp.x + v.p.x) / 2, (pp.y + v.p.y) / 2);
       seg.push(`<line x1="${pp.x.toFixed(1)}" y1="${pp.y.toFixed(1)}" x2="${
         v.p.x.toFixed(1)}" y2="${v.p.y.toFixed(1)}" stroke="${stroke}" ` +
         `stroke-width="${(w * wScale).toFixed(2)}" stroke-opacity="${op.toFixed(2)}" ` +
@@ -2373,7 +2398,7 @@ function draw3d() {
       if (!corner) continue;
       if (wantsSnip(v.n)) {
         const [mx, my] = polyMid([[pp.x, pp.y], [corner.x, corner.y], [v.p.x, v.p.y]]);
-        snipAt.push({ k: v.n.key, x: mx, y: my });
+        pushSnip(snipAt, v, pp, mx, my);
       }
       seg.push(`<polyline points="${pp.x.toFixed(1)},${pp.y.toFixed(1)} ${
         corner.x.toFixed(1)},${corner.y.toFixed(1)} ${v.p.x.toFixed(1)},${v.p.y.toFixed(1)}" ` +
@@ -2390,7 +2415,8 @@ function draw3d() {
     // The tick goes INSIDE .dot, after the img, so el.children keeps its
     // shape (0 = dot, 1 = label, 2 = sub) and dotEl.firstChild is still the img
     // -- both are indexed by position elsewhere in this file.
-    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>';
+    el.innerHTML = '<div class="dot"><img alt=""><b class="tick">&#10003;</b></div>' +
+      '<div class="lbl"></div>';
     el.addEventListener("click", ev => {
       ev.stopPropagation();
       // The second click of a double-click is part of the FIRST click's gesture.
@@ -2461,6 +2487,15 @@ function draw3d() {
       el.children[0].firstChild.src = (ICONS[CLASS] || {})[r] || "";
       el._rar = r; el._cls = CLASS;
     }
+    /* The weapons of the line you clicked, named individually -- the line label
+       gives you its base form, this gives you what it becomes. Only that line,
+       and only where the name actually changes, so a line that keeps one name
+       for five levels still says it once. */
+    const par = v.n.parent && N.get(v.n.parent);
+    const lbl = el.children[1];
+    lbl.textContent = selLine != null && v.n.t === selLine && (!par || par.name !== v.n.name)
+      ? v.n.name : "";
+    lbl.style.fontSize = (v.cls === "cur" ? 29 : 25) + "px";
   });
   // 3D has no corner to turn: the branch is the hop from the parent weapon to
   // the line's base, so the name is written along that.
